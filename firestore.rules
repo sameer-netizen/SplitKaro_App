@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(memberIds) {
+      return signedIn() && request.auth.uid in memberIds;
+    }
+
+    function groupDoc(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId));
+    }
+
+    function groupMembers(groupId) {
+      return groupDoc(groupId).data.members;
+    }
+
+    function isGroupMember(groupId) {
+      return isMember(groupMembers(groupId));
+    }
+
+    // Users can read/write their own profile
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == userId;
+    }
+
+    // Groups: signed-in creator can create; only members can read.
+    match /groups/{groupId} {
+      allow read: if isMember(resource.data.members);
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.members is list
+        && request.auth.uid in request.resource.data.members
+        && request.resource.data.memberDetails is map;
+      allow update, delete: if false;
+
+      // Expenses sub-collection
+      match /expenses/{expenseId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.description is string
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.paidBy in groupMembers(groupId);
+        allow update, delete: if false;
+      }
+
+      // Settlements sub-collection
+      match /settlements/{settlementId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId)
+          && request.resource.data.recordedBy == request.auth.uid
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.paidBy in groupMembers(groupId)
+          && request.resource.data.paidTo in groupMembers(groupId);
+        allow update, delete: if false;
+      }
+    }
+  }
+}
