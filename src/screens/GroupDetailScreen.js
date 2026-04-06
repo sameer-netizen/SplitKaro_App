@@ -6,8 +6,8 @@ import {
 } from 'react-native';
 import {
   collection, query, orderBy, onSnapshot, doc,
-  updateDoc, arrayUnion, arrayRemove, getDocs, where,
-  deleteDoc, setDoc, serverTimestamp, deleteField, limit,
+  updateDoc, arrayUnion, arrayRemove, getDocs,
+  deleteDoc, setDoc, serverTimestamp, deleteField,
 } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -60,6 +60,7 @@ export default function GroupDetailScreen({ route, navigation }) {
   const prevExpCount = useRef(0);
 
   const makeGuestId = () => `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const normalize = (v) => (v || '').trim().toLowerCase();
 
   // ── Group subscription ───────────────────────────────────────
   useEffect(() => {
@@ -162,21 +163,23 @@ export default function GroupDetailScreen({ route, navigation }) {
   const searchUsers = async (text) => {
     setSearchInput(text);
     const trimmed = text.trim();
-    const searchLower = trimmed.toLowerCase();
+    const searchLower = normalize(trimmed);
     if (trimmed.length < 2) { setSearchResults([]); return; }
     setSearching(true);
     try {
-      const [emailExactSnap, usersSnap] = await Promise.all([
-        getDocs(query(collection(db, 'users'), where('email', '==', searchLower))),
-        getDocs(query(collection(db, 'users'), limit(200))),
-      ]);
+      const usersSnap = await getDocs(query(collection(db, 'users')));
       const byUid = {};
-      [...emailExactSnap.docs, ...usersSnap.docs].forEach((d) => {
+      usersSnap.docs.forEach((d) => {
         const data = d.data();
-        const name = (data.name || '').toLowerCase();
-        const email = (data.email || '').toLowerCase();
-        const matches = name.includes(searchLower) || email.includes(searchLower);
-        if (matches && !byUid[data.uid]) byUid[data.uid] = data;
+        const uid = data.uid || d.id;
+        const name = (data.name || '').trim();
+        const nameLower = normalize(name);
+        const email = normalize(data.email);
+        const matches = nameLower.includes(searchLower) || email.includes(searchLower);
+        if (!matches || !uid || !name) return;
+        if (!byUid[uid]) {
+          byUid[uid] = { uid, name, email };
+        }
       });
       setSearchResults(
         Object.values(byUid).filter((u) => u.uid !== user.uid && !alreadyMember(u.uid))
@@ -189,12 +192,12 @@ export default function GroupDetailScreen({ route, navigation }) {
   const pickSearchResult = async (found) => {
     setSearchInput('');
     setSearchResults([]);
-    await addMemberToGroup(found.uid, found.name, found.email, true);
+    await addMemberToGroup(found.uid, found.name || 'User', normalize(found.email), true);
   };
 
   const addGuestToGroup = async () => {
     const trimName = guestName.trim();
-    const trimEmail = guestEmail.trim().toLowerCase();
+    const trimEmail = normalize(guestEmail);
     if (!trimName) { Alert.alert('Missing name', 'Enter a name for the guest member.'); return; }
     if (trimEmail && emailAlreadyMember(trimEmail)) {
       Alert.alert('Already in group', 'This email is already in the group.');

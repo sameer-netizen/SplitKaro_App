@@ -4,7 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ScrollView, Alert,
   ActivityIndicator,
 } from 'react-native';
-import { collection, addDoc, query, where, getDocs, serverTimestamp, doc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, query, getDocs, serverTimestamp, doc, setDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -25,35 +25,40 @@ export default function CreateGroupScreen({ navigation }) {
 
   const makeGuestId = () => `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  const emailAlreadyAdded = (email) => {
+  const normalize = (v) => (v || '').trim().toLowerCase();
+
+  const searchUsers = async (text) => {
     if (!email) return false;
-    return members.some((member) => member.email?.toLowerCase() === email.toLowerCase());
-  };
+    const searchLower = normalize(text);
+    if (searchLower.length < 2) {
 
   const searchUsers = async (text) => {
     setSearchInput(text);
     const trimmed = text.trim().toLowerCase();
     if (trimmed.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    setSearching(true);
-    try {
-      const nameEnd = trimmed.replace(/.$/, (c) => String.fromCharCode(c.charCodeAt(0) + 1));
-      const [emailSnap, nameSnap] = await Promise.all([
-        getDocs(query(collection(db, 'users'), where('email', '==', trimmed))),
-        getDocs(query(collection(db, 'users'), where('name', '>=', trimmed), where('name', '<', nameEnd))),
-      ]);
+      const usersSnap = await getDocs(query(collection(db, 'users')));
+      const matches = usersSnap.docs
+        .map((d) => {
+          const data = d.data();
+          return {
+            uid: data.uid || d.id,
+            name: (data.name || '').trim(),
+            email: normalize(data.email),
+          };
+        })
+        .filter((u) => {
+          if (!u.uid || !u.name) return false;
+          const nameLower = normalize(u.name);
+          return nameLower.includes(searchLower) || u.email.includes(searchLower);
+        })
+        .filter((u) => u.uid !== user.uid && !members.some((m) => m.uid === u.uid));
+
       const byUid = {};
-      [...emailSnap.docs, ...nameSnap.docs].forEach((d) => {
-        const data = d.data();
-        if (!byUid[data.uid]) byUid[data.uid] = data;
+      matches.forEach((u) => {
+        if (!byUid[u.uid]) byUid[u.uid] = u;
       });
-      setSearchResults(
-        Object.values(byUid).filter(
-          (u) => u.uid !== user.uid && !members.some((m) => m.uid === u.uid)
-        )
-      );
+
+      setSearchResults(Object.values(byUid));
     } catch {
       // silent fail
     } finally {
@@ -62,20 +67,29 @@ export default function CreateGroupScreen({ navigation }) {
   };
 
   const pickSearchResult = (found) => {
+    const safeName = (found.name || 'User').trim();
     setSearchInput('');
     setSearchResults([]);
-    setMembers((prev) => [...prev, { uid: found.uid, name: found.name, email: found.email, registered: true }]);
+    setMembers((prev) => [
+      ...prev,
+      {
+        uid: found.uid,
+        name: safeName,
+        email: normalize(found.email),
+        registered: true,
+      },
+    ]);
   };
 
   const addGuestMember = () => {
     const trimName = guestName.trim();
-    const trimEmail = guestEmail.trim().toLowerCase();
+    const trimEmail = normalize(guestEmail);
 
     if (!trimName) {
       Alert.alert('Missing name', 'Enter a name for the guest member.');
       return;
     }
-    if (trimEmail === user.email.toLowerCase()) {
+    if (trimEmail === normalize(user.email)) {
       Alert.alert('Invalid email', 'Your own email is already included in the group.');
       return;
     }
@@ -92,6 +106,11 @@ export default function CreateGroupScreen({ navigation }) {
         email: trimEmail,
         registered: false,
       },
+    ]);
+
+    setGuestName('');
+    setGuestEmail('');
+  };
     ]);
 
     setGuestName('');
