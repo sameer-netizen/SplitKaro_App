@@ -46,6 +46,14 @@ export default function SettleUpScreen({ route, navigation }) {
   const parsedAmount = parseFloat(customAmount);
   const isPartial = !isNaN(parsedAmount) && parsedAmount < transaction.amount - 0.01;
 
+  const goToPreviousScreen = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Balances', { groupId });
+  };
+
   const confirmSettle = async () => {
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       Alert.alert('Invalid amount', 'Enter a valid amount greater than ₹0.');
@@ -82,7 +90,7 @@ export default function SettleUpScreen({ route, navigation }) {
       const msg = isPartial
         ? `Partial payment of ${formatINR(parsedAmount)} recorded.`
         : `${formatINR(parsedAmount)} settlement recorded.`;
-      Alert.alert('Settled! ✅', msg, [{ text: 'OK', onPress: () => navigation.pop(2) }]);
+      Alert.alert('Settled! ✅', msg, [{ text: 'OK', onPress: goToPreviousScreen }]);
     } catch (err) {
       Alert.alert('Error', 'Could not record settlement. Please try again.');
       console.error(err);
