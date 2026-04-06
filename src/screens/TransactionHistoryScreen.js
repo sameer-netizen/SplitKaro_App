@@ -83,7 +83,9 @@ export default function TransactionHistoryScreen({ route }) {
     const paidByValue = String(item.paidBy || '');
     const paidByEmailLike = paidByValue.toLowerCase();
     const isSender = paidByValue === myUid || (!!myEmail && paidByEmailLike === myEmail) || item.recordedBy === myUid;
-    const involveMe = isSender || item.paidTo === myUid;
+    const isReceiver = item.paidTo === myUid || (!!myEmail && String(item.paidTo || '').toLowerCase() === myEmail);
+    const involveMe = isSender || isReceiver;
+    const canUnsettle = isSender || (item.isPartial === true && involveMe);
     const fromLabel = isSender ? 'You' : (item.paidByName || item.paidBy);
     const toLabel = item.paidTo === user?.uid ? 'you' : (item.paidToName || item.paidTo);
     return (
@@ -106,7 +108,7 @@ export default function TransactionHistoryScreen({ route }) {
           <Text style={[styles.amount, involveMe && { color: COLORS.primary }]}>
             {formatINR(item.amount)}
           </Text>
-          {isSender && (
+          {canUnsettle && (
             <TouchableOpacity
               style={styles.unsettle}
               onPress={() => handleUnsettle(item)}

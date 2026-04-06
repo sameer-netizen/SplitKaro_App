@@ -94,8 +94,11 @@ service cloud.firestore {
         allow delete: if isOwnerByUidOrEmail(groupDoc(groupId).data.createdBy)
           || isAdmin()
           || request.auth.uid == resource.data.paidBy
+          || request.auth.uid == resource.data.paidTo
           || request.auth.uid == resource.data.recordedBy
-          || (request.auth.token.email != null && request.auth.token.email == resource.data.paidBy);
+          || (request.auth.token.email != null && request.auth.token.email == resource.data.paidBy)
+          || (request.auth.token.email != null && request.auth.token.email == resource.data.paidTo)
+          || (resource.data.isPartial == true && isGroupMember(groupId));
       }
     }
   }
