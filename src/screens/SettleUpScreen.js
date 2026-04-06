@@ -14,9 +14,11 @@ const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5', owe: '#C6
 export default function SettleUpScreen({ route, navigation }) {
   const { groupId, transaction, memberNames = {} } = route.params || {};
   const { user } = useAuth();
+  const currentUserId = user?.uid || '';
   const safeAmount = Number(transaction?.amount || 0);
+  const safeTxnAmount = Number.isFinite(safeAmount) ? safeAmount : 0;
   const [saving, setSaving] = useState(false);
-  const [customAmount, setCustomAmount] = useState(safeAmount.toFixed(2));
+  const [customAmount, setCustomAmount] = useState(safeTxnAmount.toFixed(2));
   const [note, setNote] = useState('');
   const [existingFullSettlement, setExistingFullSettlement] = useState(null);
   const [loadingCheck, setLoadingCheck] = useState(true);
@@ -59,23 +61,27 @@ export default function SettleUpScreen({ route, navigation }) {
     );
   }
 
-  const fromName = transaction.from === user.uid ? 'You' : memberNames[transaction.from] || 'Someone';
-  const toName = transaction.to === user.uid ? 'You' : memberNames[transaction.to] || 'Someone';
+  const fromName = transaction.from === currentUserId ? 'You' : memberNames[transaction.from] || 'Someone';
+  const toName = transaction.to === currentUserId ? 'You' : memberNames[transaction.to] || 'Someone';
 
   const parsedAmount = parseFloat(customAmount);
-  const isPartial = !isNaN(parsedAmount) && parsedAmount < transaction.amount - 0.01;
+  const isPartial = !isNaN(parsedAmount) && parsedAmount < safeTxnAmount - 0.01;
 
   const goToPreviousScreen = () => {
     navigation.replace('Balances', { groupId });
   };
 
   const confirmSettle = async () => {
+    if (!currentUserId) {
+      Alert.alert('Session expired', 'Please sign in again and retry settlement.');
+      return;
+    }
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       Alert.alert('Invalid amount', 'Enter a valid amount greater than ₹0.');
       return;
     }
-    if (parsedAmount > transaction.amount + 0.01) {
-      Alert.alert('Too much', `Amount cannot exceed ${formatINR(transaction.amount)}.`);
+    if (parsedAmount > safeTxnAmount + 0.01) {
+      Alert.alert('Too much', `Amount cannot exceed ${formatINR(safeTxnAmount)}.`);
       return;
     }
     if (existingFullSettlement) {
@@ -100,7 +106,7 @@ export default function SettleUpScreen({ route, navigation }) {
         note: note.trim(),
         date: serverTimestamp(),
         dateStr,
-        recordedBy: user.uid,
+        recordedBy: currentUserId,
       });
       const msg = isPartial
         ? `Partial payment of ${formatINR(parsedAmount)} recorded.`
@@ -125,16 +131,16 @@ export default function SettleUpScreen({ route, navigation }) {
 
         <View style={styles.row}>
           <View style={styles.personBadge}>
-            <Text style={styles.personInitial}>{(transaction.from === user.uid ? 'Y' : (memberNames[transaction.from] || 'S')).charAt(0).toUpperCase()}</Text>
+            <Text style={styles.personInitial}>{(transaction.from === currentUserId ? 'Y' : (memberNames[transaction.from] || 'S')).charAt(0).toUpperCase()}</Text>
           </View>
           <Text style={styles.arrow}>pays</Text>
           <View style={styles.personBadge}>
-            <Text style={styles.personInitial}>{(transaction.to === user.uid ? 'Y' : (memberNames[transaction.to] || 'S')).charAt(0).toUpperCase()}</Text>
+            <Text style={styles.personInitial}>{(transaction.to === currentUserId ? 'Y' : (memberNames[transaction.to] || 'S')).charAt(0).toUpperCase()}</Text>
           </View>
         </View>
 
         <Text style={styles.names}>{fromName} → {toName}</Text>
-        <Text style={styles.maxLabel}>Suggested: {formatINR(transaction.amount)}</Text>
+        <Text style={styles.maxLabel}>Suggested: {formatINR(safeTxnAmount)}</Text>
 
         {/* Amount input */}
         <View style={styles.amountRow}>
@@ -148,7 +154,7 @@ export default function SettleUpScreen({ route, navigation }) {
           />
         </View>
         {isPartial && (
-          <Text style={styles.partialNote}>Partial payment — remaining {formatINR(transaction.amount - parsedAmount)} still owed</Text>
+          <Text style={styles.partialNote}>Partial payment — remaining {formatINR(Math.max(safeTxnAmount - parsedAmount, 0))} still owed</Text>
         )}
 
         {/* Warning for existing settlement */}
