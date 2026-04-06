@@ -2,12 +2,13 @@ import React, { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
-import { collection, query, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { useAuth } from '../context/AuthContext';
-import { calculateNetBalances, calculateMinTransactions, formatINR } from '../utils/calculations';
+import { calculateNetBalances, calculateMinTransactions, calculateDirectTransactions, formatINR } from '../utils/calculations';
 
 const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5', owe: '#C62828', owed: '#1B5E20' };
 
@@ -18,12 +19,17 @@ export default function BalancesScreen({ route, navigation }) {
   const [expenses, setExpenses] = useState([]);
   const [settlements, setSettlements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [smartEnabled, setSmartEnabled] = useState(true);
+  const [savingToggle, setSavingToggle] = useState(false);
 
   useEffect(() => {
-    const { getDoc, doc } = require('firebase/firestore');
-    getDoc(doc(db, 'groups', groupId)).then((snap) => {
-      if (snap.exists()) setGroup({ id: snap.id, ...snap.data() });
+    const unsubGroup = onSnapshot(doc(db, 'groups', groupId), (snap) => {
+      if (!snap.exists()) return;
+      const data = { id: snap.id, ...snap.data() };
+      setGroup(data);
+      setSmartEnabled(data.smartSettlementEnabled !== false);
     });
+    return () => unsubGroup();
   }, [groupId]);
 
   useEffect(() => {
@@ -47,9 +53,25 @@ export default function BalancesScreen({ route, navigation }) {
       mNames[uid] = group.memberDetails?.[uid]?.name || 'Unknown';
     });
     const net = calculateNetBalances(expenses, settlements, members);
-    const txns = calculateMinTransactions(net);
+    const txns = smartEnabled
+      ? calculateMinTransactions(net)
+      : calculateDirectTransactions(expenses, settlements);
     return { netBalances: net, transactions: txns, memberNames: mNames };
-  }, [group, expenses, settlements]);
+  }, [group, expenses, settlements, smartEnabled]);
+
+  const onToggleSmartSettlement = async (value) => {
+    if (!group) return;
+    setSmartEnabled(value);
+    setSavingToggle(true);
+    try {
+      await updateDoc(doc(db, 'groups', groupId), { smartSettlementEnabled: value });
+    } catch {
+      // Revert only if save fails.
+      setSmartEnabled((prev) => !prev);
+    } finally {
+      setSavingToggle(false);
+    }
+  };
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.accent} /></View>;
@@ -107,8 +129,24 @@ export default function BalancesScreen({ route, navigation }) {
             {transactions.length > 0 && (
               <>
                 <View style={styles.smartHeader}>
-                  <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Smart Settlement</Text>
-                  <Text style={styles.smartSub}>{transactions.length} transaction{transactions.length !== 1 ? 's' : ''} to settle all debts</Text>
+                  <View style={styles.smartRow}>
+                    <Text style={[styles.sectionTitle, { marginTop: 16, marginBottom: 0 }]}>Smart Settlement</Text>
+                    <View style={styles.toggleWrap}>
+                      <Text style={styles.toggleLabel}>{smartEnabled ? 'ON' : 'OFF'}</Text>
+                      <Switch
+                        value={smartEnabled}
+                        onValueChange={onToggleSmartSettlement}
+                        trackColor={{ false: '#BDBDBD', true: COLORS.accent + '88' }}
+                        thumbColor={smartEnabled ? COLORS.accent : '#f4f3f4'}
+                        disabled={savingToggle}
+                      />
+                    </View>
+                  </View>
+                  <Text style={styles.smartSub}>
+                    {smartEnabled
+                      ? `${transactions.length} transaction${transactions.length !== 1 ? 's' : ''} to settle all debts`
+                      : `${transactions.length} direct due${transactions.length !== 1 ? 's' : ''} (without minimization)`}
+                  </Text>
                 </View>
               </>
             )}
@@ -160,6 +198,9 @@ const styles = StyleSheet.create({
   historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
   historyBtnText: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600' },
   smartHeader: { marginTop: 16, marginBottom: 4 },
+  smartRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  toggleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  toggleLabel: { fontSize: 11, color: '#888', fontWeight: '700' },
   smartSub: { fontSize: 12, color: '#aaa', marginBottom: 8 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   balanceRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4 },

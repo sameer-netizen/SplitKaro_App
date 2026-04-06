@@ -64,6 +64,66 @@ export function calculateMinTransactions(netBalances) {
 }
 
 /**
+ * Derive direct per-person dues without minimizing transaction count.
+ * Returns an array of { from, to, amount } objects where `from` owes `to`.
+ */
+export function calculateDirectTransactions(expenses, settlements) {
+  const debts = {};
+
+  const getDebt = (from, to) => debts[from]?.[to] || 0;
+  const setDebt = (from, to, value) => {
+    if (!debts[from]) debts[from] = {};
+    if (value < 0.01) delete debts[from][to];
+    else debts[from][to] = Math.round(value * 100) / 100;
+    if (debts[from] && Object.keys(debts[from]).length === 0) delete debts[from];
+  };
+
+  // Adds a debt relation while netting opposite direction automatically.
+  const addDebt = (from, to, amount) => {
+    if (!from || !to || from === to || !amount || amount <= 0) return;
+    const opposite = getDebt(to, from);
+    if (opposite > 0) {
+      if (opposite >= amount) {
+        setDebt(to, from, opposite - amount);
+      } else {
+        setDebt(to, from, 0);
+        const current = getDebt(from, to);
+        setDebt(from, to, current + (amount - opposite));
+      }
+      return;
+    }
+    const current = getDebt(from, to);
+    setDebt(from, to, current + amount);
+  };
+
+  // Expense split means each participant owes payer their share.
+  expenses.forEach(({ paidBy, splitAmong }) => {
+    if (!paidBy || !Array.isArray(splitAmong)) return;
+    splitAmong.forEach(({ userId, amount }) => {
+      if (!userId || !amount || userId === paidBy) return;
+      addDebt(userId, paidBy, Number(amount));
+    });
+  });
+
+  // A settlement paidBy -> paidTo reduces paidBy's dues to paidTo.
+  settlements.forEach(({ paidBy, paidTo, amount }) => {
+    if (!paidBy || !paidTo || !amount) return;
+    addDebt(paidTo, paidBy, Number(amount));
+  });
+
+  const txns = [];
+  Object.entries(debts).forEach(([from, toMap]) => {
+    Object.entries(toMap).forEach(([to, amount]) => {
+      const rounded = Math.round(Number(amount) * 100) / 100;
+      if (rounded > 0.01) txns.push({ from, to, amount: rounded });
+    });
+  });
+
+  txns.sort((a, b) => b.amount - a.amount);
+  return txns;
+}
+
+/**
  * Split an amount equally among a list of user IDs.
  * Returns an array of { userId, amount } objects.
  */

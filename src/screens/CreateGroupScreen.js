@@ -151,6 +151,7 @@ export default function CreateGroupScreen({ navigation }) {
         description: description.trim(),
         members: memberIds,
         memberDetails,
+        smartSettlementEnabled: true,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
         inviteCode,
