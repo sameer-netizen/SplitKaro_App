@@ -77,3 +77,9 @@ jobs:
             ---
             - EAS Build ID: ${{ env.BUILD_ID }}
           files: release-assets/SplitKaro-latest.apk
+
+      - name: Deploy website to Expo Hosting (production)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx eas-cli@latest deploy --prod --non-interactive
