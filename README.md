@@ -5,6 +5,49 @@ Split expenses across multiple users, sync in real time across devices — **100
 
 ---
 
+## Download & Install
+
+### Android (Direct APK)
+
+> No Play Store needed — just download and install.
+
+1. Go to the [**Releases**](https://github.com/sameer-netizen/SplitKaro_App/releases) page on GitHub.
+2. Open the latest release (tagged `apk-YYYYMMDD-HHMMSS`).
+3. Download **`SplitKaro-latest.apk`** under *Assets*.
+4. On your Android phone:
+   - Open the downloaded APK file.
+   - If prompted, tap **Settings → Allow from this source** (one-time permission).
+   - Tap **Install** → **Done**.
+5. Open **SplitKaro** from your app drawer and register a free account.
+
+> **Tip:** You can also share the APK file directly (WhatsApp, email, etc.) — recipients follow steps 4–5.
+
+---
+
+### iOS
+
+> iOS does not allow direct APK installs. Choose one of the options below.
+
+#### Option A — Expo Go (free, no Apple account needed)
+
+1. Install **[Expo Go](https://apps.apple.com/app/expo-go/id982107779)** from the App Store.
+2. Ask the developer to share the Expo project link or scan the QR code from `npx expo start`.
+3. The app loads instantly — phone and Mac must be on the same Wi-Fi, or run `--tunnel` mode.
+
+#### Option B — TestFlight (standalone, requires Apple Developer account)
+
+1. Build the app using EAS:
+   ```bash
+   npx eas-cli login
+   npm run build:ios
+   ```
+2. In [App Store Connect](https://appstoreconnect.apple.com), find the build under **TestFlight**.
+3. Add testers by email — they receive an invite to install via the **TestFlight** app.
+
+> **Note:** An [Apple Developer Program](https://developer.apple.com/programs/) membership ($99/year) is required for TestFlight distribution.
+
+---
+
 ## Features
 
 | Feature | Description |
