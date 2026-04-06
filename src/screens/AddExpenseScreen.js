@@ -23,7 +23,7 @@ const CATEGORIES = [
 ];
 
 export default function AddExpenseScreen({ route, navigation }) {
-  const { groupId, group, expense = null, editMode = false } = route.params;
+  const { groupId, group, expense = null, editMode = false } = route.params || {};
   const { user } = useAuth();
   const { isOnline, addToQueue } = useOfflineQueue();
 
@@ -69,7 +69,7 @@ export default function AddExpenseScreen({ route, navigation }) {
 
   const [description, setDescription] = useState('');
   const [amountStr, setAmountStr] = useState('');
-  const [paidBy, setPaidBy] = useState(user.uid);
+  const [paidBy, setPaidBy] = useState(user?.uid || '');
   const [category, setCategory] = useState('other');
   const [splitMode, setSplitMode] = useState('equally'); // 'equally' | 'exact'
   const [selectedForSplit, setSelectedForSplit] = useState(members.map((m) => m.uid));

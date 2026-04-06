@@ -13,7 +13,7 @@ import { calculateNetBalances, calculateMinTransactions, calculateDirectTransact
 const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5', owe: '#C62828', owed: '#1B5E20' };
 
 export default function BalancesScreen({ route, navigation }) {
-  const { groupId } = route.params;
+  const { groupId } = route.params || {};
   const { user } = useAuth();
   const [group, setGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
@@ -77,7 +77,15 @@ export default function BalancesScreen({ route, navigation }) {
     return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.accent} /></View>;
   }
 
-  const myBalance = netBalances[user.uid] || 0;
+  if (!groupId) {
+    return (
+      <View style={styles.center}>
+        <Text style={{ color: '#666' }}>Group not found.</Text>
+      </View>
+    );
+  }
+
+  const myBalance = netBalances[user?.uid] || 0;
 
   return (
     <View style={styles.container}>
@@ -112,11 +120,11 @@ export default function BalancesScreen({ route, navigation }) {
             {Object.entries(netBalances).map(([uid, bal]) => {
               const rounded = Math.round(bal * 100) / 100;
               const name = memberNames[uid] || uid;
-              const isMe = uid === user.uid;
+              const isMe = uid === user?.uid;
               return (
                 <View key={uid} style={styles.balanceRow}>
                   <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{name.charAt(0).toUpperCase()}</Text>
+                    <Text style={styles.avatarText}>{(name || '?').charAt(0).toUpperCase()}</Text>
                   </View>
                   <Text style={styles.balanceName}>{name}{isMe ? ' (you)' : ''}</Text>
                   <Text style={[styles.balanceAmt, { color: rounded >= 0 ? COLORS.owed : COLORS.owe }]}>
@@ -160,18 +168,18 @@ export default function BalancesScreen({ route, navigation }) {
         renderItem={({ item }) => {
           const fromName = memberNames[item.from] || item.from;
           const toName = memberNames[item.to] || item.to;
-          const involvesMe = item.from === user.uid || item.to === user.uid;
+          const involvesMe = item.from === user?.uid || item.to === user?.uid;
           return (
             <View style={[styles.txnCard, involvesMe && styles.txnCardHighlight]}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.txnText}>
-                  <Text style={styles.txnName}>{item.from === user.uid ? 'You' : fromName}</Text>
+                  <Text style={styles.txnName}>{item.from === user?.uid ? 'You' : fromName}</Text>
                   {' → '}
-                  <Text style={styles.txnName}>{item.to === user.uid ? 'You' : toName}</Text>
+                  <Text style={styles.txnName}>{item.to === user?.uid ? 'You' : toName}</Text>
                 </Text>
                 <Text style={styles.txnAmt}>{formatINR(item.amount)}</Text>
               </View>
-              {item.from === user.uid && (
+              {item.from === user?.uid && (
                 <TouchableOpacity
                   style={styles.settleBtn}
                   onPress={() => navigation.navigate('SettleUp', { groupId, transaction: item, memberNames })}

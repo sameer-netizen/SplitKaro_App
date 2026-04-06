@@ -214,7 +214,7 @@ export default function CreateGroupScreen({ navigation }) {
                   onPress={() => pickSearchResult(u)}
                 >
                   <View style={styles.memberAvatar}>
-                    <Text style={styles.mavText}>{u.name.charAt(0).toUpperCase()}</Text>
+                    <Text style={styles.mavText}>{(u.name || '?').charAt(0).toUpperCase()}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.memberName}>{u.name}</Text>
@@ -267,7 +267,7 @@ export default function CreateGroupScreen({ navigation }) {
           {members.map((m) => (
             <View key={m.uid} style={styles.memberRow}>
               <View style={styles.memberAvatar}>
-                <Text style={styles.mavText}>{m.name.charAt(0).toUpperCase()}</Text>
+                <Text style={styles.mavText}>{(m.name || '?').charAt(0).toUpperCase()}</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.memberName}>{m.name}{m.registered === false ? ' (guest)' : ''}</Text>

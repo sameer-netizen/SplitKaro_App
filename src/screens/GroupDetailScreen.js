@@ -31,7 +31,7 @@ const CATEGORIES = {
 const generateCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 
 export default function GroupDetailScreen({ route, navigation }) {
-  const { groupId, groupName: routeGroupName } = route.params;
+  const { groupId, groupName: routeGroupName } = route.params || {};
   const { user, isAdmin } = useAuth();
   const [group, setGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
@@ -64,6 +64,11 @@ export default function GroupDetailScreen({ route, navigation }) {
 
   // ── Group subscription ───────────────────────────────────────
   useEffect(() => {
+    if (!groupId) {
+      setLoading(false);
+      return () => {};
+    }
+
     const unsub = onSnapshot(doc(db, 'groups', groupId), (snap) => {
       if (snap.exists()) {
         const data = { id: snap.id, ...snap.data() };
@@ -76,6 +81,11 @@ export default function GroupDetailScreen({ route, navigation }) {
 
   // ── Expenses subscription (with new-expense notification) ────
   useEffect(() => {
+    if (!groupId) {
+      setLoading(false);
+      return () => {};
+    }
+
     const q = query(collection(db, 'groups', groupId, 'expenses'), orderBy('date', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
       const latest = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -492,7 +502,7 @@ export default function GroupDetailScreen({ route, navigation }) {
                           disabled={saving}
                         >
                           <View style={styles.resultAvatar}>
-                            <Text style={styles.mavText}>{u.name.charAt(0).toUpperCase()}</Text>
+                            <Text style={styles.mavText}>{(u.name || '?').charAt(0).toUpperCase()}</Text>
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.memberName}>{u.name}</Text>

@@ -30,7 +30,12 @@ export function useOfflineQueue() {
     // Refresh pending count
     try {
       const raw = await AsyncStorage.getItem(QUEUE_KEY);
-      setPendingCount(raw ? JSON.parse(raw).length : 0);
+      if (!raw) {
+        setPendingCount(0);
+      } else {
+        const parsed = JSON.parse(raw);
+        setPendingCount(Array.isArray(parsed) ? parsed.length : 0);
+      }
     } catch {}
   };
 

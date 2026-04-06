@@ -11,13 +11,19 @@ import { formatINR } from '../utils/calculations';
 const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5', owe: '#C62828' };
 
 export default function TransactionHistoryScreen({ route }) {
-  const { groupId } = route.params;
+  const { groupId } = route.params || {};
   const { user } = useAuth();
   const [settlements, setSettlements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [unsettlingId, setUnsettlingId] = useState(null);
 
   useEffect(() => {
+    if (!groupId) {
+      setLoading(false);
+      setSettlements([]);
+      return () => {};
+    }
+
     const q = query(
       collection(db, 'groups', groupId, 'settlements'),
       orderBy('date', 'desc')
@@ -59,11 +65,19 @@ export default function TransactionHistoryScreen({ route }) {
     return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.accent} /></View>;
   }
 
+  if (!groupId) {
+    return (
+      <View style={styles.center}>
+        <Text style={{ color: '#666' }}>Group not found.</Text>
+      </View>
+    );
+  }
+
   const renderItem = ({ item }) => {
-    const involveMe = item.paidBy === user.uid || item.paidTo === user.uid;
-    const fromLabel = item.paidBy === user.uid ? 'You' : (item.paidByName || item.paidBy);
-    const toLabel = item.paidTo === user.uid ? 'you' : (item.paidToName || item.paidTo);
-    const isSender = item.paidBy === user.uid;
+    const involveMe = item.paidBy === user?.uid || item.paidTo === user?.uid;
+    const fromLabel = item.paidBy === user?.uid ? 'You' : (item.paidByName || item.paidBy);
+    const toLabel = item.paidTo === user?.uid ? 'you' : (item.paidToName || item.paidTo);
+    const isSender = item.paidBy === user?.uid;
     return (
       <View style={[styles.card, involveMe && styles.cardHighlight]}>
         <View style={styles.iconWrap}>
