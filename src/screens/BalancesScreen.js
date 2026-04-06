@@ -132,6 +132,11 @@ export default function BalancesScreen({ route, navigation }) {
               const name = memberNames[uid] || uid;
               const totalSpent = Number(spentBy[uid] || 0);
               const isMe = uid === user?.uid;
+              const netLabel = rounded > 0.01
+                ? `+${formatINR(rounded)}`
+                : rounded < -0.01
+                  ? `-${formatINR(-rounded)}`
+                  : 'Settled';
               return (
                 <View key={uid} style={styles.balanceRow}>
                   <View style={styles.avatar}>
@@ -141,9 +146,12 @@ export default function BalancesScreen({ route, navigation }) {
                     <Text style={styles.balanceName}>{name}{isMe ? ' (you)' : ''}</Text>
                     <Text style={styles.spentText}>Spent: {formatINR(totalSpent)}</Text>
                   </View>
-                  <Text style={[styles.balanceAmt, { color: rounded >= 0 ? COLORS.owed : COLORS.owe }]}>
-                    {rounded > 0.01 ? `+${formatINR(rounded)}` : rounded < -0.01 ? `-${formatINR(-rounded)}` : 'Settled'}
-                  </Text>
+                  <View style={styles.balanceMeta}>
+                    <Text style={styles.netLabel}>Net:</Text>
+                    <Text style={[styles.balanceAmt, { color: rounded >= 0 ? COLORS.owed : COLORS.owe }]}>
+                      {netLabel}
+                    </Text>
+                  </View>
                 </View>
               );
             })}
@@ -252,6 +260,8 @@ const styles = StyleSheet.create({
   balanceNameWrap: { flex: 1 },
   balanceName: { fontSize: 14, fontWeight: '600', color: '#333' },
   spentText: { fontSize: 11, color: '#8a8a8a', marginTop: 2 },
+  balanceMeta: { alignItems: 'flex-end' },
+  netLabel: { fontSize: 11, color: '#8a8a8a', marginBottom: 2, fontWeight: '600' },
   balanceAmt: { fontSize: 15, fontWeight: '700' },
   txnCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: 'row', alignItems: 'center', elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4 },
   txnCardHighlight: { borderWidth: 1.5, borderColor: COLORS.accent + '66' },
