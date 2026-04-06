@@ -182,7 +182,21 @@ export default function BalancesScreen({ route, navigation }) {
               {item.from === user?.uid && (
                 <TouchableOpacity
                   style={styles.settleBtn}
-                  onPress={() => navigation.navigate('SettleUp', { groupId, transaction: item, memberNames })}
+                  onPress={() => {
+                    const amount = Number(item?.amount);
+                    if (!item?.from || !item?.to || !Number.isFinite(amount) || amount <= 0) {
+                      return;
+                    }
+                    navigation.navigate('SettleUp', {
+                      groupId,
+                      transaction: {
+                        from: String(item.from),
+                        to: String(item.to),
+                        amount,
+                      },
+                      memberNames,
+                    });
+                  }}
                 >
                   <Text style={styles.settleBtnText}>Settle Up</Text>
                 </TouchableOpacity>

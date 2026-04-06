@@ -15,6 +15,8 @@ export default function SettleUpScreen({ route, navigation }) {
   const { groupId, transaction, memberNames = {} } = route.params || {};
   const { user } = useAuth();
   const currentUserId = user?.uid || '';
+  const txnFrom = transaction?.from ? String(transaction.from) : '';
+  const txnTo = transaction?.to ? String(transaction.to) : '';
   const safeAmount = Number(transaction?.amount || 0);
   const safeTxnAmount = Number.isFinite(safeAmount) ? safeAmount : 0;
   const [saving, setSaving] = useState(false);
@@ -25,7 +27,7 @@ export default function SettleUpScreen({ route, navigation }) {
 
   // Check for existing settlement between same payer and payee
   useEffect(() => {
-    if (!groupId || !transaction?.from || !transaction?.to) {
+    if (!groupId || !txnFrom || !txnTo) {
       setExistingFullSettlement(null);
       setLoadingCheck(false);
       return () => {};
@@ -33,8 +35,8 @@ export default function SettleUpScreen({ route, navigation }) {
 
     const q = query(
       collection(db, 'groups', groupId, 'settlements'),
-      where('paidBy', '==', transaction.from),
-      where('paidTo', '==', transaction.to)
+      where('paidBy', '==', txnFrom),
+      where('paidTo', '==', txnTo)
     );
     const unsub = onSnapshot(q, (snap) => {
       const fullSettlement = snap.docs
@@ -47,9 +49,9 @@ export default function SettleUpScreen({ route, navigation }) {
       setLoadingCheck(false);
     });
     return () => unsub();
-  }, [groupId, transaction?.from, transaction?.to]);
+  }, [groupId, txnFrom, txnTo]);
 
-  if (!groupId || !transaction) {
+  if (!groupId || !txnFrom || !txnTo || safeTxnAmount <= 0) {
     return (
       <View style={[styles.container, { justifyContent: 'center', padding: 24 }]}>
         <Text style={[styles.title, { textAlign: 'center' }]}>Settlement data missing</Text>
@@ -61,8 +63,14 @@ export default function SettleUpScreen({ route, navigation }) {
     );
   }
 
-  const fromName = transaction.from === currentUserId ? 'You' : memberNames[transaction.from] || 'Someone';
-  const toName = transaction.to === currentUserId ? 'You' : memberNames[transaction.to] || 'Someone';
+  const getSafeName = (uid, fallback) => {
+    const val = memberNames?.[uid];
+    if (typeof val === 'string' && val.trim()) return val;
+    return fallback;
+  };
+
+  const fromName = txnFrom === currentUserId ? 'You' : getSafeName(txnFrom, 'Someone');
+  const toName = txnTo === currentUserId ? 'You' : getSafeName(txnTo, 'Someone');
 
   const parsedAmount = parseFloat(customAmount);
   const isPartial = !isNaN(parsedAmount) && parsedAmount < safeTxnAmount - 0.01;
@@ -97,10 +105,10 @@ export default function SettleUpScreen({ route, navigation }) {
     try {
       const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
       await addDoc(collection(db, 'groups', groupId, 'settlements'), {
-        paidBy: transaction.from,
-        paidByName: memberNames[transaction.from] || 'Unknown',
-        paidTo: transaction.to,
-        paidToName: memberNames[transaction.to] || 'Unknown',
+        paidBy: txnFrom,
+        paidByName: getSafeName(txnFrom, 'Unknown'),
+        paidTo: txnTo,
+        paidToName: getSafeName(txnTo, 'Unknown'),
         amount: Math.round(parsedAmount * 100) / 100,
         isPartial,
         note: note.trim(),
@@ -131,11 +139,11 @@ export default function SettleUpScreen({ route, navigation }) {
 
         <View style={styles.row}>
           <View style={styles.personBadge}>
-            <Text style={styles.personInitial}>{(transaction.from === currentUserId ? 'Y' : (memberNames[transaction.from] || 'S')).charAt(0).toUpperCase()}</Text>
+            <Text style={styles.personInitial}>{String(txnFrom === currentUserId ? 'Y' : getSafeName(txnFrom, 'S')).charAt(0).toUpperCase()}</Text>
           </View>
           <Text style={styles.arrow}>pays</Text>
           <View style={styles.personBadge}>
-            <Text style={styles.personInitial}>{(transaction.to === currentUserId ? 'Y' : (memberNames[transaction.to] || 'S')).charAt(0).toUpperCase()}</Text>
+            <Text style={styles.personInitial}>{String(txnTo === currentUserId ? 'Y' : getSafeName(txnTo, 'S')).charAt(0).toUpperCase()}</Text>
           </View>
         </View>
 
