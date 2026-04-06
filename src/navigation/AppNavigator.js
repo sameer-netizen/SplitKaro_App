@@ -2,7 +2,7 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, TouchableOpacity } from 'react-native';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -18,6 +18,8 @@ import AddExpenseScreen from '../screens/AddExpenseScreen';
 import BalancesScreen from '../screens/BalancesScreen';
 import SettleUpScreen from '../screens/SettleUpScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import JoinGroupScreen from '../screens/JoinGroupScreen';
+import TransactionHistoryScreen from '../screens/TransactionHistoryScreen';
 
 const AuthStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator();
@@ -28,12 +30,29 @@ const COLORS = { primary: '#1B5E20', accent: '#4CAF50' };
 function GroupsStack() {
   return (
     <MainStack.Navigator screenOptions={{ headerStyle: { backgroundColor: COLORS.primary }, headerTintColor: '#fff', headerTitleStyle: { fontWeight: 'bold' } }}>
-      <MainStack.Screen name="GroupsList" component={GroupsScreen} options={{ title: 'My Groups' }} />
+      <MainStack.Screen
+        name="GroupsList"
+        component={GroupsScreen}
+        options={({ navigation }) => ({
+          title: 'My Groups',
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('JoinGroup')}
+              style={{ marginRight: 4 }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="link-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+          ),
+        })}
+      />
       <MainStack.Screen name="CreateGroup" component={CreateGroupScreen} options={{ title: 'New Group' }} />
+      <MainStack.Screen name="JoinGroup" component={JoinGroupScreen} options={{ title: 'Join Group' }} />
       <MainStack.Screen name="GroupDetail" component={GroupDetailScreen} options={({ route }) => ({ title: route.params?.groupName || 'Group' })} />
       <MainStack.Screen name="AddExpense" component={AddExpenseScreen} options={{ title: 'Add Expense' }} />
       <MainStack.Screen name="Balances" component={BalancesScreen} options={{ title: 'Balances' }} />
       <MainStack.Screen name="SettleUp" component={SettleUpScreen} options={{ title: 'Settle Up' }} />
+      <MainStack.Screen name="TransactionHistory" component={TransactionHistoryScreen} options={{ title: 'Transaction History' }} />
     </MainStack.Navigator>
   );
 }

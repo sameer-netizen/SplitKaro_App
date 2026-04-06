@@ -1,0 +1,64 @@
+name: Publish Latest APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish-latest-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Fetch latest finished Android build info
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx eas-cli@latest build:list \
+            --platform android \
+            --status finished \
+            --limit 1 \
+            --non-interactive \
+            --json > builds.json
+
+          APK_URL=$(jq -r '.[0].artifacts.applicationArchiveUrl // .[0].artifacts.buildUrl' builds.json)
+          BUILD_ID=$(jq -r '.[0].id' builds.json)
+
+          if [ -z "$APK_URL" ] || [ "$APK_URL" = "null" ]; then
+            echo "Could not resolve APK URL from latest EAS build." >&2
+            exit 1
+          fi
+
+          echo "APK_URL=$APK_URL" >> "$GITHUB_ENV"
+          echo "BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
+
+      - name: Download APK
+        run: |
+          mkdir -p release-assets
+          curl -L "$APK_URL" -o release-assets/SplitKaro-latest.apk
+          ls -lh release-assets
+
+      - name: Generate release tag
+        run: |
+          TAG="apk-$(date -u +'%Y%m%d-%H%M%S')"
+          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: SplitKaro APK ${{ env.RELEASE_TAG }}
+          body: |
+            Latest Android APK published from EAS build.
+
+            - EAS Build ID: ${{ env.BUILD_ID }}
+            - Source URL: ${{ env.APK_URL }}
+          files: release-assets/SplitKaro-latest.apk

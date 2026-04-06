@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { useAuth } from '../context/AuthContext';
 import { splitEqually } from '../utils/calculations';
+import { useOfflineQueue } from '../hooks/useOfflineQueue';
 
 const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5', danger: '#C62828' };
 
@@ -24,6 +25,7 @@ const CATEGORIES = [
 export default function AddExpenseScreen({ route, navigation }) {
   const { groupId, group } = route.params;
   const { user } = useAuth();
+  const { isOnline, addToQueue } = useOfflineQueue();
   const members = useMemo(() => {
     const details = group?.memberDetails || {};
     return Object.entries(details).map(([uid, info]) => ({ uid, ...info }));
@@ -73,8 +75,29 @@ export default function AddExpenseScreen({ route, navigation }) {
     const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     const paidByName = group?.memberDetails?.[paidBy]?.name || 'Someone';
 
+    const expenseData = {
+      groupId,
+      description: desc,
+      amount,
+      paidBy,
+      paidByName,
+      category,
+      splitAmong,
+      dateStr,
+      createdBy: user.uid,
+    };
+
     setSaving(true);
     try {
+      if (!isOnline) {
+        await addToQueue(expenseData);
+        Alert.alert(
+          'Saved Offline 📴',
+          'This expense has been saved locally and will sync automatically when you\'re back online.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+        return;
+      }
       await addDoc(collection(db, 'groups', groupId, 'expenses'), {
         description: desc,
         amount,
@@ -88,8 +111,18 @@ export default function AddExpenseScreen({ route, navigation }) {
       });
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Error', 'Could not save expense. Please try again.');
-      console.error(err);
+      // Network failed mid-save — queue it
+      try {
+        await addToQueue(expenseData);
+        Alert.alert(
+          'Saved Offline',
+          'Connection lost. Expense saved locally and will sync when reconnected.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } catch {
+        Alert.alert('Error', 'Could not save expense. Please try again.');
+        console.error(err);
+      }
     } finally {
       setSaving(false);
     }
@@ -97,6 +130,12 @@ export default function AddExpenseScreen({ route, navigation }) {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {!isOnline && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline-outline" size={16} color="#fff" />
+          <Text style={styles.offlineText}>Offline — expense will sync when connected</Text>
+        </View>
+      )}
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
 
         {/* Description & Amount */}
@@ -246,4 +285,6 @@ const styles = StyleSheet.create({
   totalHint: { marginTop: 10, fontSize: 13, color: '#888', textAlign: 'right' },
   saveBtn: { backgroundColor: COLORS.accent, margin: 14, borderRadius: 14, paddingVertical: 16, alignItems: 'center', elevation: 3 },
   saveBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  offlineBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E65100', paddingVertical: 8, paddingHorizontal: 16, gap: 8 },
+  offlineText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 });

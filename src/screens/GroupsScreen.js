@@ -7,11 +7,13 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { useAuth } from '../context/AuthContext';
+import { useOfflineQueue } from '../hooks/useOfflineQueue';
 
 const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5', card: '#fff' };
 
 export default function GroupsScreen({ navigation }) {
   const { user } = useAuth();
+  const { pendingCount, refreshStatus } = useOfflineQueue();
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -44,7 +46,7 @@ export default function GroupsScreen({ navigation }) {
     return unsub;
   }, [user]);
 
-  const onRefresh = useCallback(() => setRefreshing(true), []);
+  const onRefresh = useCallback(() => { setRefreshing(true); refreshStatus(); }, []);
 
   const renderItem = ({ item }) => {
     const memberCount = item.members?.length ?? 0;
@@ -77,6 +79,12 @@ export default function GroupsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {pendingCount > 0 && (
+        <View style={styles.syncBanner}>
+          <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
+          <Text style={styles.syncText}>{pendingCount} expense{pendingCount !== 1 ? 's' : ''} pending sync</Text>
+        </View>
+      )}
       <FlatList
         data={groups}
         keyExtractor={(item) => item.id}
@@ -120,4 +128,6 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontWeight: '700', color: '#555', marginTop: 16 },
   emptySub: { fontSize: 14, color: '#999', textAlign: 'center', marginTop: 8, lineHeight: 20 },
   fab: { position: 'absolute', right: 20, bottom: 28, width: 58, height: 58, borderRadius: 29, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
+  syncBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E65100', paddingVertical: 7, paddingHorizontal: 16, gap: 8 },
+  syncText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 });

@@ -61,14 +61,23 @@ export default function BalancesScreen({ route, navigation }) {
     <View style={styles.container}>
       {/* My Balance Banner */}
       <View style={[styles.banner, { backgroundColor: myBalance >= 0 ? COLORS.owed : COLORS.owe }]}>
-        <Text style={styles.bannerSub}>Overall, you are</Text>
-        {myBalance > 0.01 ? (
-          <Text style={styles.bannerBig}>owed {formatINR(myBalance)}</Text>
-        ) : myBalance < -0.01 ? (
-          <Text style={styles.bannerBig}>in debt {formatINR(-myBalance)}</Text>
-        ) : (
-          <Text style={styles.bannerBig}>all settled up 🎉</Text>
-        )}
+        <View>
+          <Text style={styles.bannerSub}>Overall, you are</Text>
+          {myBalance > 0.01 ? (
+            <Text style={styles.bannerBig}>owed {formatINR(myBalance)}</Text>
+          ) : myBalance < -0.01 ? (
+            <Text style={styles.bannerBig}>in debt {formatINR(-myBalance)}</Text>
+          ) : (
+            <Text style={styles.bannerBig}>all settled up 🎉</Text>
+          )}
+        </View>
+        <TouchableOpacity
+          style={styles.historyBtn}
+          onPress={() => navigation.navigate('TransactionHistory', { groupId })}
+        >
+          <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.9)" />
+          <Text style={styles.historyBtnText}>History</Text>
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -96,7 +105,12 @@ export default function BalancesScreen({ route, navigation }) {
             })}
 
             {transactions.length > 0 && (
-              <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Who Pays Whom</Text>
+              <>
+                <View style={styles.smartHeader}>
+                  <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Smart Settlement</Text>
+                  <Text style={styles.smartSub}>{transactions.length} transaction{transactions.length !== 1 ? 's' : ''} to settle all debts</Text>
+                </View>
+              </>
             )}
           </>
         }
@@ -140,9 +154,13 @@ export default function BalancesScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.bg },
-  banner: { padding: 20, alignItems: 'center' },
+  banner: { padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   bannerSub: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600' },
-  bannerBig: { color: '#fff', fontSize: 26, fontWeight: '800', marginTop: 4 },
+  bannerBig: { color: '#fff', fontSize: 24, fontWeight: '800', marginTop: 4 },
+  historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
+  historyBtnText: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600' },
+  smartHeader: { marginTop: 16, marginBottom: 4 },
+  smartSub: { fontSize: 12, color: '#aaa', marginBottom: 8 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   balanceRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4 },
   avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.accent + '33', justifyContent: 'center', alignItems: 'center', marginRight: 12 },

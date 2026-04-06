@@ -5,6 +5,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return signedIn() && request.auth.token.email == 'sameer781998@gmail.com';
+    }
+
+    function isOwnerByUidOrEmail(ownerValue) {
+      return signedIn() && (
+        ownerValue == request.auth.uid ||
+        (request.auth.token.email != null && ownerValue == request.auth.token.email)
+      );
+    }
+
     function isMember(memberIds) {
       return signedIn() && request.auth.uid in memberIds;
     }
@@ -27,6 +38,17 @@ service cloud.firestore {
       allow write: if signedIn() && request.auth.uid == userId;
     }
 
+    // Invite codes: any signed-in user can read (to join by code);
+    // only the group owner or admin can create/update
+    match /invites/{inviteCode} {
+      allow read: if signedIn();
+      allow create: if signedIn() && (
+        get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.createdBy == request.auth.uid
+        || isAdmin()
+      );
+      allow update, delete: if isAdmin();
+    }
+
     // Groups: signed-in creator can create; only members can read.
     match /groups/{groupId} {
       allow read: if isMember(resource.data.members);
@@ -36,7 +58,14 @@ service cloud.firestore {
         && request.resource.data.members is list
         && request.auth.uid in request.resource.data.members
         && request.resource.data.memberDetails is map;
-      allow update, delete: if false;
+      // Owner/admin can do any update (incl. removing members, updating inviteCode).
+      // Other members can only append new members (createdBy/name/createdAt immutable).
+      allow update: if (isOwnerByUidOrEmail(resource.data.createdBy) || isAdmin()) ||
+        (isMember(resource.data.members)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.name == resource.data.name
+          && request.resource.data.createdAt == resource.data.createdAt);
+      allow delete: if isOwnerByUidOrEmail(resource.data.createdBy) || isAdmin();
 
       // Expenses sub-collection
       match /expenses/{expenseId} {
@@ -47,7 +76,7 @@ service cloud.firestore {
           && request.resource.data.amount is number
           && request.resource.data.amount > 0
           && request.resource.data.paidBy in groupMembers(groupId);
-        allow update, delete: if false;
+        allow update, delete: if isOwnerByUidOrEmail(groupDoc(groupId).data.createdBy) || isAdmin();
       }
 
       // Settlements sub-collection
@@ -59,7 +88,7 @@ service cloud.firestore {
           && request.resource.data.amount > 0
           && request.resource.data.paidBy in groupMembers(groupId)
           && request.resource.data.paidTo in groupMembers(groupId);
-        allow update, delete: if false;
+        allow update, delete: if isOwnerByUidOrEmail(groupDoc(groupId).data.createdBy) || isAdmin();
       }
     }
   }

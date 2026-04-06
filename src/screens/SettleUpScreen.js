@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, ScrollView,
+  Alert, ActivityIndicator, ScrollView, TextInput,
 } from 'react-native';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,11 +15,25 @@ export default function SettleUpScreen({ route, navigation }) {
   const { groupId, transaction, memberNames } = route.params;
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [customAmount, setCustomAmount] = useState(transaction.amount.toFixed(2));
+  const [note, setNote] = useState('');
 
   const fromName = transaction.from === user.uid ? 'You' : memberNames[transaction.from] || 'Someone';
   const toName = transaction.to === user.uid ? 'You' : memberNames[transaction.to] || 'Someone';
 
+  const parsedAmount = parseFloat(customAmount);
+  const isPartial = !isNaN(parsedAmount) && parsedAmount < transaction.amount - 0.01;
+
   const confirmSettle = async () => {
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      Alert.alert('Invalid amount', 'Enter a valid amount greater than ₹0.');
+      return;
+    }
+    if (parsedAmount > transaction.amount + 0.01) {
+      Alert.alert('Too much', `Amount cannot exceed ${formatINR(transaction.amount)}.`);
+      return;
+    }
+
     setSaving(true);
     try {
       const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -28,14 +42,17 @@ export default function SettleUpScreen({ route, navigation }) {
         paidByName: memberNames[transaction.from] || 'Unknown',
         paidTo: transaction.to,
         paidToName: memberNames[transaction.to] || 'Unknown',
-        amount: transaction.amount,
+        amount: Math.round(parsedAmount * 100) / 100,
+        isPartial,
+        note: note.trim(),
         date: serverTimestamp(),
         dateStr,
         recordedBy: user.uid,
       });
-      Alert.alert('Settled!', `₹${transaction.amount.toFixed(2)} settlement recorded.`, [
-        { text: 'OK', onPress: () => navigation.pop(2) },
-      ]);
+      const msg = isPartial
+        ? `Partial payment of ${formatINR(parsedAmount)} recorded.`
+        : `${formatINR(parsedAmount)} settlement recorded.`;
+      Alert.alert('Settled! ✅', msg, [{ text: 'OK', onPress: () => navigation.pop(2) }]);
     } catch (err) {
       Alert.alert('Error', 'Could not record settlement. Please try again.');
       console.error(err);
@@ -46,11 +63,10 @@ export default function SettleUpScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}>
-      {/* Visual summary */}
       <View style={styles.card}>
         <Ionicons name="swap-horizontal" size={48} color={COLORS.accent} style={{ marginBottom: 16 }} />
         <Text style={styles.title}>Record Settlement</Text>
-        <Text style={styles.sub}>This will mark the following payment as settled</Text>
+        <Text style={styles.sub}>Enter the amount paid and optionally add a note.</Text>
 
         <View style={styles.divider} />
 
@@ -65,7 +81,31 @@ export default function SettleUpScreen({ route, navigation }) {
         </View>
 
         <Text style={styles.names}>{fromName} → {toName}</Text>
-        <Text style={styles.amount}>{formatINR(transaction.amount)}</Text>
+        <Text style={styles.maxLabel}>Suggested: {formatINR(transaction.amount)}</Text>
+
+        {/* Amount input */}
+        <View style={styles.amountRow}>
+          <Text style={styles.rupeeSign}>₹</Text>
+          <TextInput
+            style={styles.amountInput}
+            value={customAmount}
+            onChangeText={setCustomAmount}
+            keyboardType="decimal-pad"
+            selectTextOnFocus
+          />
+        </View>
+        {isPartial && (
+          <Text style={styles.partialNote}>Partial payment — remaining {formatINR(transaction.amount - parsedAmount)} still owed</Text>
+        )}
+
+        {/* Optional note */}
+        <TextInput
+          style={styles.noteInput}
+          placeholder="Add a note (optional)"
+          value={note}
+          onChangeText={setNote}
+          maxLength={60}
+        />
       </View>
 
       <TouchableOpacity style={styles.btn} onPress={confirmSettle} disabled={saving}>
@@ -74,7 +114,7 @@ export default function SettleUpScreen({ route, navigation }) {
           : (
             <>
               <Ionicons name="checkmark-circle" size={22} color="#fff" />
-              <Text style={styles.btnText}>Confirm Settlement</Text>
+              <Text style={styles.btnText}>{isPartial ? 'Record Partial Payment' : 'Confirm Full Settlement'}</Text>
             </>
           )}
       </TouchableOpacity>
@@ -84,7 +124,7 @@ export default function SettleUpScreen({ route, navigation }) {
       </TouchableOpacity>
 
       <Text style={styles.notice}>
-        Note: Both parties should agree on the payment before recording it. No money is transferred through this app — it only records the settlement.
+        No money is transferred through this app — it only records the settlement.
       </Text>
     </ScrollView>
   );
@@ -100,10 +140,15 @@ const styles = StyleSheet.create({
   personBadge: { width: 60, height: 60, borderRadius: 30, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' },
   personInitial: { color: '#fff', fontSize: 26, fontWeight: '800' },
   arrow: { fontSize: 14, color: '#aaa', fontWeight: '600' },
-  names: { fontSize: 16, color: '#555', fontWeight: '600', marginBottom: 10 },
-  amount: { fontSize: 36, fontWeight: '900', color: COLORS.primary },
+  names: { fontSize: 16, color: '#555', fontWeight: '600', marginBottom: 6 },
+  maxLabel: { fontSize: 13, color: '#aaa', marginBottom: 16 },
+  amountRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: COLORS.accent, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, marginBottom: 8, width: '80%' },
+  rupeeSign: { fontSize: 24, fontWeight: '800', color: COLORS.primary, marginRight: 4 },
+  amountInput: { flex: 1, fontSize: 28, fontWeight: '800', color: COLORS.primary, textAlign: 'center' },
+  partialNote: { fontSize: 12, color: '#E65100', textAlign: 'center', marginBottom: 12, fontStyle: 'italic' },
+  noteInput: { borderWidth: 1.5, borderColor: '#E0E0E0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#555', width: '100%', backgroundColor: '#FAFAFA', marginTop: 8 },
   btn: { backgroundColor: COLORS.accent, borderRadius: 14, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, elevation: 3, marginBottom: 12 },
-  btnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cancelBtn: { paddingVertical: 14, alignItems: 'center' },
   cancelText: { color: '#888', fontSize: 15 },
   notice: { marginTop: 16, fontSize: 12, color: '#bbb', textAlign: 'center', lineHeight: 18 },

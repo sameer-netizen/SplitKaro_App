@@ -8,6 +8,37 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
+// Show notifications as banners even when app is in foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldPlaySound: false,
+    shouldSetBadge: true,
+  }),
+});
+
+async function requestNotificationPermission() {
+  if (Platform.OS === 'web') return;
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    if (existing !== 'granted') {
+      await Notifications.requestPermissionsAsync();
+    }
+    // Schedule a weekly reminder
+    await Notifications.cancelScheduledNotificationAsync('weekly-reminder').catch(() => {});
+    await Notifications.scheduleNotificationAsync({
+      identifier: 'weekly-reminder',
+      content: {
+        title: 'SplitKaro',
+        body: "Don't forget to check your pending dues! 💸",
+      },
+      trigger: { seconds: 7 * 24 * 60 * 60, repeats: true },
+    });
+  } catch {}
+}
 
 const AuthContext = createContext(null);
 
@@ -20,6 +51,7 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
+        requestNotificationPermission();
         // Fetch user profile from Firestore
         try {
           const profileDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
@@ -51,8 +83,10 @@ export function AuthProvider({ children }) {
 
   const logout = () => signOut(auth);
 
+  const isAdmin = user?.email === 'sameer781998@gmail.com';
+
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, register, login, logout }}>
+    <AuthContext.Provider value={{ user, userProfile, loading, isAdmin, register, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -15,6 +15,10 @@
       "**/*"
     ],
     "ios": {
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSUserNotificationsUsageDescription": "SplitKaro reminds you about pending dues and new expenses in your groups."
+      },
       "supportsTablet": true,
       "bundleIdentifier": "com.splitkaro.app"
     },
@@ -29,12 +33,24 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1B5E20",
+          "sounds": []
+        }
+      ]
     ],
     "extra": {
       "eas": {
         "projectId": "70f1aa68-546e-4957-b2a8-989d2400c7aa"
       }
+    },
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/70f1aa68-546e-4957-b2a8-989d2400c7aa"
     }
   }
 }

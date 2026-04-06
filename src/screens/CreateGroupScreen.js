@@ -4,7 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ScrollView, Alert,
   ActivityIndicator,
 } from 'react-native';
-import { collection, addDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, serverTimestamp, doc, setDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -15,7 +15,8 @@ export default function CreateGroupScreen({ navigation }) {
   const { user, userProfile } = useAuth();
   const [groupName, setGroupName] = useState('');
   const [description, setDescription] = useState('');
-  const [emailInput, setEmailInput] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [members, setMembers] = useState([]);   // { uid, name, email, registered }
@@ -29,34 +30,41 @@ export default function CreateGroupScreen({ navigation }) {
     return members.some((member) => member.email?.toLowerCase() === email.toLowerCase());
   };
 
-  const searchUser = async () => {
-    const trimEmail = emailInput.trim().toLowerCase();
-    if (!trimEmail) return;
-    if (trimEmail === user.email.toLowerCase()) {
-      Alert.alert('Oops', 'You are already in the group as the creator.');
+  const searchUsers = async (text) => {
+    setSearchInput(text);
+    const trimmed = text.trim().toLowerCase();
+    if (trimmed.length < 2) {
+      setSearchResults([]);
       return;
     }
-    if (emailAlreadyAdded(trimEmail)) {
-      Alert.alert('Already added', 'This person is already in the list.');
-      return;
-    }
-
     setSearching(true);
     try {
-      const q = query(collection(db, 'users'), where('email', '==', trimEmail));
-      const snap = await getDocs(q);
-      if (snap.empty) {
-        Alert.alert('User not found', `No SplitKaro account found for ${trimEmail}.\nYou can add them below as a guest member.`);
-      } else {
-        const found = snap.docs[0].data();
-        setMembers((prev) => [...prev, { uid: found.uid, name: found.name, email: found.email, registered: true }]);
-        setEmailInput('');
-      }
-    } catch (err) {
-      Alert.alert('Error', 'Could not search for user. Check your connection.');
+      const nameEnd = trimmed.replace(/.$/, (c) => String.fromCharCode(c.charCodeAt(0) + 1));
+      const [emailSnap, nameSnap] = await Promise.all([
+        getDocs(query(collection(db, 'users'), where('email', '==', trimmed))),
+        getDocs(query(collection(db, 'users'), where('name', '>=', trimmed), where('name', '<', nameEnd))),
+      ]);
+      const byUid = {};
+      [...emailSnap.docs, ...nameSnap.docs].forEach((d) => {
+        const data = d.data();
+        if (!byUid[data.uid]) byUid[data.uid] = data;
+      });
+      setSearchResults(
+        Object.values(byUid).filter(
+          (u) => u.uid !== user.uid && !members.some((m) => m.uid === u.uid)
+        )
+      );
+    } catch {
+      // silent fail
     } finally {
       setSearching(false);
     }
+  };
+
+  const pickSearchResult = (found) => {
+    setSearchInput('');
+    setSearchResults([]);
+    setMembers((prev) => [...prev, { uid: found.uid, name: found.name, email: found.email, registered: true }]);
   };
 
   const addGuestMember = () => {
@@ -116,11 +124,22 @@ export default function CreateGroupScreen({ navigation }) {
         };
       });
 
-      await addDoc(collection(db, 'groups'), {
+      const inviteCode = Math.random().toString(36).slice(2, 8).toUpperCase();
+
+      const groupRef = await addDoc(collection(db, 'groups'), {
         name: trimName,
         description: description.trim(),
         members: memberIds,
         memberDetails,
+        createdBy: user.uid,
+        createdAt: serverTimestamp(),
+        inviteCode,
+      });
+
+      // Create invite lookup entry
+      await setDoc(doc(db, 'invites', inviteCode), {
+        groupId: groupRef.id,
+        groupName: trimName,
         createdBy: user.uid,
         createdAt: serverTimestamp(),
       });
@@ -150,26 +169,44 @@ export default function CreateGroupScreen({ navigation }) {
         {/* Add Members */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Add Members</Text>
-          <Text style={styles.hint}>Search registered users by email, or add guest members directly without requiring them to register.</Text>
+          <Text style={styles.hint}>Search registered users by name or email, or add guest members directly without requiring them to register.</Text>
 
           <Text style={styles.subTitle}>Add Registered User</Text>
-          <View style={styles.searchRow}>
+          <View style={styles.searchInputWrap}>
+            <Ionicons name="search" size={18} color="#aaa" style={{ marginLeft: 10 }} />
             <TextInput
-              style={[styles.input, { flex: 1, marginBottom: 0 }]}
-              placeholder="friend@example.com"
-              value={emailInput}
-              onChangeText={setEmailInput}
+              style={styles.searchInputField}
+              placeholder="Search by name or email..."
+              value={searchInput}
+              onChangeText={searchUsers}
               autoCapitalize="none"
-              keyboardType="email-address"
-              onSubmitEditing={searchUser}
               returnKeyType="search"
             />
-            <TouchableOpacity style={styles.searchBtn} onPress={searchUser} disabled={searching}>
-              {searching
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Ionicons name="search" size={20} color="#fff" />}
-            </TouchableOpacity>
+            {searching && <ActivityIndicator size="small" color={COLORS.accent} style={{ marginRight: 10 }} />}
           </View>
+          {searchResults.length > 0 && (
+            <View style={styles.searchDropdown}>
+              {searchResults.map((u) => (
+                <TouchableOpacity
+                  key={u.uid}
+                  style={styles.searchResultRow}
+                  onPress={() => pickSearchResult(u)}
+                >
+                  <View style={styles.memberAvatar}>
+                    <Text style={styles.mavText}>{u.name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.memberName}>{u.name}</Text>
+                    <Text style={styles.memberEmail}>{u.email}</Text>
+                  </View>
+                  <Ionicons name="person-add-outline" size={20} color={COLORS.accent} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {searchInput.trim().length >= 2 && searchResults.length === 0 && !searching && (
+            <Text style={styles.noResults}>No users found. Add as guest below.</Text>
+          )}
 
           <Text style={styles.subTitle}>Add Guest Member</Text>
           <TextInput
@@ -242,6 +279,11 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1.5, borderColor: '#E0E0E0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, marginBottom: 12, color: '#333', backgroundColor: '#FAFAFA' },
   hint: { fontSize: 13, color: '#888', marginBottom: 12, lineHeight: 18 },
   subTitle: { fontSize: 13, color: COLORS.primary, marginBottom: 8, fontWeight: '700' },
+  searchInputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E0E0E0', borderRadius: 10, backgroundColor: '#FAFAFA', marginBottom: 4 },
+  searchInputField: { flex: 1, paddingHorizontal: 10, paddingVertical: 11, fontSize: 15, color: '#333' },
+  searchDropdown: { borderWidth: 1.5, borderColor: '#E8F5E9', borderRadius: 10, backgroundColor: '#fff', marginBottom: 8, overflow: 'hidden' },
+  searchResultRow: { flexDirection: 'row', alignItems: 'center', padding: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  noResults: { fontSize: 12, color: '#999', marginBottom: 8, marginTop: 2, fontStyle: 'italic' },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   searchBtn: { backgroundColor: COLORS.accent, padding: 12, borderRadius: 10 },
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
