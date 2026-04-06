@@ -14,27 +14,21 @@ const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5', owe: '#C6
 export default function SettleUpScreen({ route, navigation }) {
   const { groupId, transaction, memberNames = {} } = route.params || {};
   const { user } = useAuth();
-
-  if (!groupId || !transaction) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', padding: 24 }]}> 
-        <Text style={[styles.title, { textAlign: 'center' }]}>Settlement data missing</Text>
-        <Text style={[styles.sub, { marginBottom: 20 }]}>Please go back and try again.</Text>
-        <TouchableOpacity style={styles.btn} onPress={() => navigation.navigate('Balances', { groupId })}>
-          <Text style={styles.btnText}>Back to Balances</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
+  const safeAmount = Number(transaction?.amount || 0);
   const [saving, setSaving] = useState(false);
-  const [customAmount, setCustomAmount] = useState(transaction.amount.toFixed(2));
+  const [customAmount, setCustomAmount] = useState(safeAmount.toFixed(2));
   const [note, setNote] = useState('');
   const [existingFullSettlement, setExistingFullSettlement] = useState(null);
   const [loadingCheck, setLoadingCheck] = useState(true);
 
   // Check for existing settlement between same payer and payee
   useEffect(() => {
+    if (!groupId || !transaction?.from || !transaction?.to) {
+      setExistingFullSettlement(null);
+      setLoadingCheck(false);
+      return () => {};
+    }
+
     const q = query(
       collection(db, 'groups', groupId, 'settlements'),
       where('paidBy', '==', transaction.from),
@@ -51,7 +45,19 @@ export default function SettleUpScreen({ route, navigation }) {
       setLoadingCheck(false);
     });
     return () => unsub();
-  }, [groupId, transaction.from, transaction.to]);
+  }, [groupId, transaction?.from, transaction?.to]);
+
+  if (!groupId || !transaction) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', padding: 24 }]}>
+        <Text style={[styles.title, { textAlign: 'center' }]}>Settlement data missing</Text>
+        <Text style={[styles.sub, { marginBottom: 20 }]}>Please go back and try again.</Text>
+        <TouchableOpacity style={styles.btn} onPress={() => navigation.navigate('Balances', { groupId })}>
+          <Text style={styles.btnText}>Back to Balances</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const fromName = transaction.from === user.uid ? 'You' : memberNames[transaction.from] || 'Someone';
   const toName = transaction.to === user.uid ? 'You' : memberNames[transaction.to] || 'Someone';
