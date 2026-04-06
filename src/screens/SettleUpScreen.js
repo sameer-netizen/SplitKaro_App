@@ -17,7 +17,7 @@ export default function SettleUpScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
   const [customAmount, setCustomAmount] = useState(transaction.amount.toFixed(2));
   const [note, setNote] = useState('');
-  const [existingSettlement, setExistingSettlement] = useState(null);
+  const [existingFullSettlement, setExistingFullSettlement] = useState(null);
   const [loadingCheck, setLoadingCheck] = useState(true);
 
   // Check for existing settlement between same payer and payee
@@ -28,9 +28,10 @@ export default function SettleUpScreen({ route, navigation }) {
       where('paidTo', '==', transaction.to)
     );
     const unsub = onSnapshot(q, (snap) => {
-      if (snap.docs.length > 0) {
-        setExistingSettlement(snap.docs[0].data());
-      }
+      const fullSettlement = snap.docs
+        .map((d) => d.data())
+        .find((s) => s.isPartial !== true);
+      setExistingFullSettlement(fullSettlement || null);
       setLoadingCheck(false);
     }, (err) => {
       console.error('Error checking existing settlement:', err);
@@ -54,10 +55,10 @@ export default function SettleUpScreen({ route, navigation }) {
       Alert.alert('Too much', `Amount cannot exceed ${formatINR(transaction.amount)}.`);
       return;
     }
-    if (existingSettlement) {
+    if (existingFullSettlement) {
       Alert.alert(
         'Pending Settlement Exists',
-        `You already have a pending settlement of ${formatINR(existingSettlement.amount)} to this person. Unsettle it first if you want to settle again.`,
+        `You already have a full settlement of ${formatINR(existingFullSettlement.amount)} to this person. Unsettle it first if you want to settle again.`,
         [{ text: 'OK' }]
       );
       return;
@@ -128,11 +129,11 @@ export default function SettleUpScreen({ route, navigation }) {
         )}
 
         {/* Warning for existing settlement */}
-        {existingSettlement && (
+        {existingFullSettlement && (
           <View style={styles.warningBox}>
             <Ionicons name="alert-circle" size={18} color={COLORS.owe} />
             <Text style={styles.warningText}>
-              Existing settlement of {formatINR(existingSettlement.amount)} found. Unsettle it first in the transaction history before settling again.
+              Existing full settlement of {formatINR(existingFullSettlement.amount)} found. Unsettle it first in the transaction history before settling again.
             </Text>
           </View>
         )}
@@ -147,7 +148,7 @@ export default function SettleUpScreen({ route, navigation }) {
         />
       </View>
 
-      <TouchableOpacity style={[styles.btn, (saving || existingSettlement) && styles.btnDisabled]} onPress={confirmSettle} disabled={saving || existingSettlement || loadingCheck}>
+      <TouchableOpacity style={[styles.btn, (saving || existingFullSettlement) && styles.btnDisabled]} onPress={confirmSettle} disabled={saving || existingFullSettlement || loadingCheck}>
         {saving || loadingCheck
           ? <ActivityIndicator color="#fff" />
           : (
