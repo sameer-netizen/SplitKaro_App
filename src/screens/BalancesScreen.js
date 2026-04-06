@@ -45,18 +45,28 @@ export default function BalancesScreen({ route, navigation }) {
     return () => { unsubExp(); unsubSet(); };
   }, [groupId]);
 
-  const { netBalances, transactions, memberNames } = useMemo(() => {
-    if (!group) return { netBalances: {}, transactions: [], memberNames: {} };
+  const { netBalances, transactions, memberNames, spentBy } = useMemo(() => {
+    if (!group) return { netBalances: {}, transactions: [], memberNames: {}, spentBy: {} };
     const members = group.members || [];
     const mNames = {};
+    const totals = {};
     members.forEach((uid) => {
       mNames[uid] = group.memberDetails?.[uid]?.name || 'Unknown';
+      totals[uid] = 0;
     });
+
+    expenses.forEach((exp) => {
+      const payer = exp?.paidBy;
+      const amount = Number(exp?.amount || 0);
+      if (!payer || !Number.isFinite(amount) || amount <= 0) return;
+      totals[payer] = (totals[payer] || 0) + amount;
+    });
+
     const net = calculateNetBalances(expenses, settlements, members);
     const txns = smartEnabled
       ? calculateMinTransactions(net)
       : calculateDirectTransactions(expenses, settlements);
-    return { netBalances: net, transactions: txns, memberNames: mNames };
+    return { netBalances: net, transactions: txns, memberNames: mNames, spentBy: totals };
   }, [group, expenses, settlements, smartEnabled]);
 
   const onToggleSmartSettlement = async (value) => {
@@ -120,13 +130,17 @@ export default function BalancesScreen({ route, navigation }) {
             {Object.entries(netBalances).map(([uid, bal]) => {
               const rounded = Math.round(bal * 100) / 100;
               const name = memberNames[uid] || uid;
+              const totalSpent = Number(spentBy[uid] || 0);
               const isMe = uid === user?.uid;
               return (
                 <View key={uid} style={styles.balanceRow}>
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>{(name || '?').charAt(0).toUpperCase()}</Text>
                   </View>
-                  <Text style={styles.balanceName}>{name}{isMe ? ' (you)' : ''}</Text>
+                  <View style={styles.balanceNameWrap}>
+                    <Text style={styles.balanceName}>{name}{isMe ? ' (you)' : ''}</Text>
+                    <Text style={styles.spentText}>Spent: {formatINR(totalSpent)}</Text>
+                  </View>
                   <Text style={[styles.balanceAmt, { color: rounded >= 0 ? COLORS.owed : COLORS.owe }]}>
                     {rounded > 0.01 ? `+${formatINR(rounded)}` : rounded < -0.01 ? `-${formatINR(-rounded)}` : 'Settled'}
                   </Text>
@@ -235,7 +249,9 @@ const styles = StyleSheet.create({
   balanceRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4 },
   avatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: COLORS.accent + '33', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   avatarText: { color: COLORS.primary, fontWeight: '700', fontSize: 16 },
-  balanceName: { flex: 1, fontSize: 14, fontWeight: '600', color: '#333' },
+  balanceNameWrap: { flex: 1 },
+  balanceName: { fontSize: 14, fontWeight: '600', color: '#333' },
+  spentText: { fontSize: 11, color: '#8a8a8a', marginTop: 2 },
   balanceAmt: { fontSize: 15, fontWeight: '700' },
   txnCard: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: 'row', alignItems: 'center', elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4 },
   txnCardHighlight: { borderWidth: 1.5, borderColor: COLORS.accent + '66' },
