@@ -132,11 +132,11 @@ export default function BalancesScreen({ route, navigation }) {
               const name = memberNames[uid] || uid;
               const totalSpent = Number(spentBy[uid] || 0);
               const isMe = uid === user?.uid;
-              const netLabel = rounded > 0.01
-                ? `+${formatINR(rounded)}`
+              const balanceStatus = rounded > 0.01
+                ? `Will get ${formatINR(rounded)}`
                 : rounded < -0.01
-                  ? `-${formatINR(-rounded)}`
-                  : 'Settled';
+                  ? `Needs to pay ${formatINR(-rounded)}`
+                  : 'All settled';
               return (
                 <View key={uid} style={styles.balanceRow}>
                   <View style={styles.avatar}>
@@ -147,9 +147,9 @@ export default function BalancesScreen({ route, navigation }) {
                     <Text style={styles.spentText}>Spent: {formatINR(totalSpent)}</Text>
                   </View>
                   <View style={styles.balanceMeta}>
-                    <Text style={styles.netLabel}>Net:</Text>
+                    <Text style={styles.netLabel}>Balance:</Text>
                     <Text style={[styles.balanceAmt, { color: rounded >= 0 ? COLORS.owed : COLORS.owe }]}>
-                      {netLabel}
+                      {balanceStatus}
                     </Text>
                   </View>
                 </View>
