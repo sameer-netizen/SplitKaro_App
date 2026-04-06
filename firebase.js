@@ -15,8 +15,9 @@
 // ============================================================
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { initializeAuth, getAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ── FIREBASE CONFIG ──────────────────────────────────────────
@@ -36,9 +37,13 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const AUTH_SINGLETON_KEY = '__splitkaro_auth_instance__';
 
 if (!globalThis[AUTH_SINGLETON_KEY]) {
-  globalThis[AUTH_SINGLETON_KEY] = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
+  if (Platform.OS === 'web') {
+    globalThis[AUTH_SINGLETON_KEY] = getAuth(app);
+  } else {
+    globalThis[AUTH_SINGLETON_KEY] = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  }
 }
 
 export const auth = globalThis[AUTH_SINGLETON_KEY];
