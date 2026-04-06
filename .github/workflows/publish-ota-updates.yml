@@ -39,3 +39,12 @@ jobs:
             --channel production \
             --message "Production OTA: ${GITHUB_SHA}" \
             --non-interactive
+
+      - name: Publish update to default channel
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx eas-cli@latest update \
+            --channel default \
+            --message "Default OTA: ${GITHUB_SHA}" \
+            --non-interactive
