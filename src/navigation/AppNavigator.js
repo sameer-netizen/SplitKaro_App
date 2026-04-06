@@ -49,7 +49,11 @@ function GroupsStack() {
       <MainStack.Screen name="CreateGroup" component={CreateGroupScreen} options={{ title: 'New Group' }} />
       <MainStack.Screen name="JoinGroup" component={JoinGroupScreen} options={{ title: 'Join Group' }} />
       <MainStack.Screen name="GroupDetail" component={GroupDetailScreen} options={({ route }) => ({ title: route.params?.groupName || 'Group' })} />
-      <MainStack.Screen name="AddExpense" component={AddExpenseScreen} options={{ title: 'Add Expense' }} />
+      <MainStack.Screen
+        name="AddExpense"
+        component={AddExpenseScreen}
+        options={({ route }) => ({ title: route.params?.editMode ? 'Edit Expense' : 'Add Expense' })}
+      />
       <MainStack.Screen name="Balances" component={BalancesScreen} options={{ title: 'Balances' }} />
       <MainStack.Screen name="SettleUp" component={SettleUpScreen} options={{ title: 'Settle Up' }} />
       <MainStack.Screen name="TransactionHistory" component={TransactionHistoryScreen} options={{ title: 'Transaction History' }} />

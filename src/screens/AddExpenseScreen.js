@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, Switch, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -23,13 +23,49 @@ const CATEGORIES = [
 ];
 
 export default function AddExpenseScreen({ route, navigation }) {
-  const { groupId, group } = route.params;
+  const { groupId, group, expense = null, editMode = false } = route.params;
   const { user } = useAuth();
   const { isOnline, addToQueue } = useOfflineQueue();
-  const members = useMemo(() => {
+
+  const groupMembers = useMemo(() => {
     const details = group?.memberDetails || {};
     return Object.entries(details).map(([uid, info]) => ({ uid, ...info }));
   }, [group]);
+
+  const members = useMemo(() => {
+    const byUid = {};
+
+    groupMembers.forEach((m) => {
+      byUid[m.uid] = {
+        uid: m.uid,
+        name: m.name || 'Unknown',
+        email: m.email || '',
+        registered: m.registered !== false,
+      };
+    });
+
+    if (expense?.paidBy && !byUid[expense.paidBy]) {
+      byUid[expense.paidBy] = {
+        uid: expense.paidBy,
+        name: expense.paidByName || 'Former member',
+        email: '',
+        registered: false,
+      };
+    }
+
+    (expense?.splitAmong || []).forEach((s) => {
+      if (!byUid[s.userId]) {
+        byUid[s.userId] = {
+          uid: s.userId,
+          name: group?.memberDetails?.[s.userId]?.name || 'Former member',
+          email: '',
+          registered: false,
+        };
+      }
+    });
+
+    return Object.values(byUid);
+  }, [groupMembers, expense, group]);
 
   const [description, setDescription] = useState('');
   const [amountStr, setAmountStr] = useState('');
@@ -39,6 +75,32 @@ export default function AddExpenseScreen({ route, navigation }) {
   const [selectedForSplit, setSelectedForSplit] = useState(members.map((m) => m.uid));
   const [exactAmounts, setExactAmounts] = useState({});
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!editMode || !expense) return;
+
+    setDescription(expense.description || '');
+    setAmountStr(String(expense.amount || ''));
+    setPaidBy(expense.paidBy || user.uid);
+    setCategory(expense.category || 'other');
+
+    const existingSplit = Array.isArray(expense.splitAmong) ? expense.splitAmong : [];
+    const selectedIds = existingSplit.map((s) => s.userId);
+    if (selectedIds.length > 0) {
+      setSelectedForSplit(selectedIds);
+    }
+
+    const amountsMap = {};
+    existingSplit.forEach((s) => {
+      amountsMap[s.userId] = String(s.amount ?? '');
+    });
+    setExactAmounts(amountsMap);
+
+    const total = Number(expense.amount || 0);
+    const expectedEqual = selectedIds.length ? total / selectedIds.length : 0;
+    const looksEqual = selectedIds.length > 0 && existingSplit.every((s) => Math.abs((Number(s.amount) || 0) - expectedEqual) < 0.01);
+    setSplitMode(looksEqual ? 'equally' : 'exact');
+  }, [editMode, expense, user.uid]);
 
   const toggleMember = (uid) => {
     setSelectedForSplit((prev) =>
@@ -54,18 +116,26 @@ export default function AddExpenseScreen({ route, navigation }) {
     const desc = description.trim();
     const amount = parseFloat(amountStr);
 
-    if (!desc) { Alert.alert('Missing description', 'Please describe this expense.'); return; }
-    if (!amountStr || isNaN(amount) || amount <= 0) { Alert.alert('Invalid amount', 'Enter a valid amount in ₹.'); return; }
-    if (selectedForSplit.length === 0) { Alert.alert('No members', 'Select at least one member to split with.'); return; }
+    if (!desc) {
+      Alert.alert('Missing description', 'Please describe this expense.');
+      return;
+    }
+    if (!amountStr || isNaN(amount) || amount <= 0) {
+      Alert.alert('Invalid amount', 'Enter a valid amount in INR.');
+      return;
+    }
+    if (selectedForSplit.length === 0) {
+      Alert.alert('No members', 'Select at least one member to split with.');
+      return;
+    }
 
     let splitAmong;
     if (splitMode === 'equally') {
       splitAmong = splitEqually(amount, selectedForSplit);
     } else {
-      // Exact mode
       const diff = Math.abs(totalExact - amount);
       if (diff > 0.5) {
-        Alert.alert('Amount mismatch', `Exact amounts total ${totalExact.toFixed(2)} but expense is ₹${amount.toFixed(2)}. Please adjust.`);
+        Alert.alert('Amount mismatch', `Exact amounts total ${totalExact.toFixed(2)} but expense is INR ${amount.toFixed(2)}. Please adjust.`);
         return;
       }
       splitAmong = selectedForSplit.map((uid) => ({ userId: uid, amount: parseFloat(exactAmounts[uid] || 0) }));
@@ -73,7 +143,7 @@ export default function AddExpenseScreen({ route, navigation }) {
 
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-    const paidByName = group?.memberDetails?.[paidBy]?.name || 'Someone';
+    const paidByName = group?.memberDetails?.[paidBy]?.name || members.find((m) => m.uid === paidBy)?.name || 'Someone';
 
     const expenseData = {
       groupId,
@@ -89,30 +159,52 @@ export default function AddExpenseScreen({ route, navigation }) {
 
     setSaving(true);
     try {
-      if (!isOnline) {
+      if (!isOnline && editMode) {
+        Alert.alert('Offline', 'Editing an existing expense requires internet connection.');
+        return;
+      }
+
+      if (!isOnline && !editMode) {
         await addToQueue(expenseData);
         Alert.alert(
-          'Saved Offline 📴',
-          'This expense has been saved locally and will sync automatically when you\'re back online.',
+          'Saved Offline',
+          'This expense has been saved locally and will sync automatically when you are back online.',
           [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
         return;
       }
-      await addDoc(collection(db, 'groups', groupId, 'expenses'), {
-        description: desc,
-        amount,
-        paidBy,
-        paidByName,
-        category,
-        splitAmong,
-        date: serverTimestamp(),
-        dateStr,
-        createdBy: user.uid,
-      });
+
+      if (editMode && expense?.id) {
+        await updateDoc(doc(db, 'groups', groupId, 'expenses', expense.id), {
+          description: desc,
+          amount,
+          paidBy,
+          paidByName,
+          category,
+          splitAmong,
+          date: serverTimestamp(),
+          dateStr,
+          updatedBy: user.uid,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await addDoc(collection(db, 'groups', groupId, 'expenses'), {
+          description: desc,
+          amount,
+          paidBy,
+          paidByName,
+          category,
+          splitAmong,
+          date: serverTimestamp(),
+          dateStr,
+          createdBy: user.uid,
+        });
+      }
+
       navigation.goBack();
     } catch (err) {
-      // Network failed mid-save — queue it
       try {
+        if (editMode) throw err;
         await addToQueue(expenseData);
         Alert.alert(
           'Saved Offline',
@@ -120,7 +212,7 @@ export default function AddExpenseScreen({ route, navigation }) {
           [{ text: 'OK', onPress: () => navigation.goBack() }]
         );
       } catch {
-        Alert.alert('Error', 'Could not save expense. Please try again.');
+        Alert.alert('Error', editMode ? 'Could not update expense. You may not have permission.' : 'Could not save expense. Please try again.');
         console.error(err);
       }
     } finally {
@@ -133,20 +225,21 @@ export default function AddExpenseScreen({ route, navigation }) {
       {!isOnline && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={16} color="#fff" />
-          <Text style={styles.offlineText}>Offline — expense will sync when connected</Text>
+          <Text style={styles.offlineText}>
+            {editMode ? 'Offline - reconnect to update expense' : 'Offline - expense will sync when connected'}
+          </Text>
         </View>
       )}
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
 
-        {/* Description & Amount */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Expense Details</Text>
           <Text style={styles.label}>Description *</Text>
           <TextInput style={styles.input} placeholder="e.g. Dinner at Dhaba" value={description} onChangeText={setDescription} maxLength={60} />
 
-          <Text style={styles.label}>Amount (₹) *</Text>
+          <Text style={styles.label}>Amount (INR) *</Text>
           <View style={styles.amountRow}>
-            <Text style={styles.rupeeSign}>₹</Text>
+            <Text style={styles.rupeeSign}>INR</Text>
             <TextInput
               style={[styles.input, { flex: 1, marginBottom: 0 }]}
               placeholder="0.00"
@@ -157,7 +250,6 @@ export default function AddExpenseScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Category */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Category</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
@@ -174,7 +266,6 @@ export default function AddExpenseScreen({ route, navigation }) {
           </ScrollView>
         </View>
 
-        {/* Paid By */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Paid By</Text>
           {members.map((m) => (
@@ -182,12 +273,11 @@ export default function AddExpenseScreen({ route, navigation }) {
               <View style={[styles.radio, paidBy === m.uid && styles.radioActive]}>
                 {paidBy === m.uid && <View style={styles.radioDot} />}
               </View>
-              <Text style={styles.radioLabel}>{m.name}{m.uid === user.uid ? ' (you)' : ''}</Text>
+              <Text style={styles.radioLabel}>{m.name}{m.uid === user.uid ? ' (you)' : m.registered === false ? ' (former)' : ''}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Split Among */}
         <View style={styles.section}>
           <View style={styles.splitHeader}>
             <Text style={styles.sectionTitle}>Split Among</Text>
@@ -202,7 +292,7 @@ export default function AddExpenseScreen({ route, navigation }) {
                 style={[styles.modeBtn, splitMode === 'exact' && styles.modeBtnActive]}
                 onPress={() => setSplitMode('exact')}
               >
-                <Text style={[styles.modeBtnText, splitMode === 'exact' && styles.modeBtnTextActive]}>Exact ₹</Text>
+                <Text style={[styles.modeBtnText, splitMode === 'exact' && styles.modeBtnTextActive]}>Exact INR</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -219,11 +309,11 @@ export default function AddExpenseScreen({ route, navigation }) {
                     {selected && <Ionicons name="checkmark" size={14} color="#fff" />}
                   </View>
                   <Text style={[styles.radioLabel, !selected && { color: '#bbb' }]}>
-                    {m.name}{m.uid === user.uid ? ' (you)' : ''}
+                    {m.name}{m.uid === user.uid ? ' (you)' : m.registered === false ? ' (former)' : ''}
                   </Text>
                 </TouchableOpacity>
                 {selected && splitMode === 'equally' && (
-                  <Text style={styles.shareAmt}>₹{equalShare}</Text>
+                  <Text style={styles.shareAmt}>INR {equalShare}</Text>
                 )}
                 {selected && splitMode === 'exact' && (
                   <TextInput
@@ -238,14 +328,14 @@ export default function AddExpenseScreen({ route, navigation }) {
             );
           })}
           {splitMode === 'exact' && (
-            <Text style={[styles.totalHint, Math.abs(totalExact - parseFloat(amountStr || 0)) > 0.5 && { color: COLORS.danger }]}>
-              Total entered: ₹{totalExact.toFixed(2)} / ₹{parseFloat(amountStr || 0).toFixed(2)}
+            <Text style={[styles.totalHint, Math.abs(totalExact - parseFloat(amountStr || 0)) > 0.5 && { color: COLORS.danger }]}> 
+              Total entered: INR {totalExact.toFixed(2)} / INR {parseFloat(amountStr || 0).toFixed(2)}
             </Text>
           )}
         </View>
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>Add Expense</Text>}
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{editMode ? 'Update Expense' : 'Add Expense'}</Text>}
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -260,7 +350,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, color: '#555', marginBottom: 6, fontWeight: '600' },
   input: { borderWidth: 1.5, borderColor: '#E0E0E0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, marginBottom: 12, color: '#333', backgroundColor: '#FAFAFA' },
   amountRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rupeeSign: { fontSize: 24, color: COLORS.primary, fontWeight: '700', marginBottom: 12 },
+  rupeeSign: { fontSize: 18, color: COLORS.primary, fontWeight: '700', marginBottom: 12 },
   catRow: { paddingVertical: 4, gap: 8 },
   catChip: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.accent, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
   catChipActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
@@ -281,7 +371,7 @@ const styles = StyleSheet.create({
   check: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#DDD', marginRight: 12, justifyContent: 'center', alignItems: 'center' },
   checkActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
   shareAmt: { fontSize: 14, fontWeight: '600', color: COLORS.primary },
-  exactInput: { borderWidth: 1.5, borderColor: '#DDD', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, width: 80, textAlign: 'right', fontSize: 14, backgroundColor: '#FAFAFA' },
+  exactInput: { borderWidth: 1.5, borderColor: '#DDD', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, width: 90, textAlign: 'right', fontSize: 14, backgroundColor: '#FAFAFA' },
   totalHint: { marginTop: 10, fontSize: 13, color: '#888', textAlign: 'right' },
   saveBtn: { backgroundColor: COLORS.accent, margin: 14, borderRadius: 14, paddingVertical: 16, alignItems: 'center', elevation: 3 },
   saveBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },

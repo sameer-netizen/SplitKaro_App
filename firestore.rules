@@ -76,7 +76,9 @@ service cloud.firestore {
           && request.resource.data.amount is number
           && request.resource.data.amount > 0
           && request.resource.data.paidBy in groupMembers(groupId);
-        allow update, delete: if isOwnerByUidOrEmail(groupDoc(groupId).data.createdBy) || isAdmin();
+        allow update, delete: if isOwnerByUidOrEmail(groupDoc(groupId).data.createdBy)
+          || isAdmin()
+          || request.auth.uid == resource.data.createdBy;
       }
 
       // Settlements sub-collection

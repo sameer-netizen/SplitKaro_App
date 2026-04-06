@@ -290,6 +290,7 @@ export default function GroupDetailScreen({ route, navigation }) {
   // ── Expense card ─────────────────────────────────────────────
   const renderExpense = ({ item }) => {
     const paidByMe = item.paidBy === user.uid;
+    const canEditExpense = canManage || item.createdBy === user.uid;
     const myShare = item.splitAmong?.find((s) => s.userId === user.uid)?.amount || 0;
     const paidByName = group?.memberDetails?.[item.paidBy]?.name || 'Someone';
     const catInfo = CATEGORIES[item.category] || CATEGORIES.other;
@@ -314,6 +315,14 @@ export default function GroupDetailScreen({ route, navigation }) {
           <Text style={[styles.netLabel, { color: netColor }]}>{netLabel}</Text>
         </View>
         <Text style={styles.expAmount}>{formatINR(item.amount)}</Text>
+        {canEditExpense && (
+          <TouchableOpacity
+            style={styles.editExpenseBtn}
+            onPress={() => navigation.navigate('AddExpense', { groupId, group, expense: item, editMode: true })}
+          >
+            <Ionicons name="create-outline" size={18} color={COLORS.primary} />
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -581,6 +590,7 @@ const styles = StyleSheet.create({
   expMeta: { fontSize: 12, color: '#999', marginTop: 2 },
   netLabel: { fontSize: 12, fontWeight: '600', marginTop: 3 },
   expAmount: { fontSize: 16, fontWeight: '700', color: '#333' },
+  editExpenseBtn: { marginLeft: 10, width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8F5E9' },
   emptyInner: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: '#555', marginTop: 16 },
   emptySub: { fontSize: 14, color: '#999', marginTop: 8 },
