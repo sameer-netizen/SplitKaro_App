@@ -12,7 +12,7 @@ Split expenses across multiple users, sync in real time across devices — **100
 > No Play Store needed — just download and install.
 
 1. Go to the [**Releases**](https://github.com/sameer-netizen/SplitKaro_App/releases) page on GitHub.
-2. Open the latest release (tagged `apk-YYYYMMDD-HHMMSS`).
+2. Open the latest release (tagged `apk-{BUILD_ID}`).
 3. Download **`SplitKaro-latest.apk`** under *Assets*.
 4. On your Android phone:
    - Open the downloaded APK file.
@@ -21,6 +21,8 @@ Split expenses across multiple users, sync in real time across devices — **100
 5. Open **SplitKaro** from your app drawer and register a free account.
 
 > **Tip:** You can also share the APK file directly (WhatsApp, email, etc.) — recipients follow steps 4–5.
+>
+> **Fallback (if release is delayed):** Download the committed APK directly from this repo path: `releases/SplitKaro-latest.apk`.
 
 ---
 
@@ -167,6 +169,22 @@ npm run build:android
 - After the build finishes, EAS will give you a **download link for the APK**
 - Send the APK to anyone — they just open it on Android to install
 - Android may ask to allow "Install from unknown sources" — that's normal for sideloaded APKs
+
+### Where the APK is generated and saved
+
+1. APK is built on **EAS Build (cloud)** using Android profile `preview`.
+2. A GitHub Action then publishes the finished APK to **GitHub Releases** as `SplitKaro-latest.apk`.
+3. Release tag format is `apk-{BUILD_ID}` (example: `apk-3bc3b637-...`).
+4. A copy is also kept in this repository at `releases/SplitKaro-latest.apk`.
+
+### GitHub workflows used
+
+- `.github/workflows/publish-latest-apk.yml`
+  - Deploys web and triggers Android EAS build on push to `main`.
+- `.github/workflows/publish-finished-apk.yml`
+  - Polls for latest finished Android build and publishes APK to GitHub Releases.
+- `.github/workflows/publish-ota-updates.yml`
+  - Publishes OTA updates for app code changes.
 
 ### iOS (TestFlight — free with Apple Developer Program at $99/year)
 
