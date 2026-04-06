@@ -49,7 +49,11 @@ export default function TransactionHistoryScreen({ route }) {
               await deleteDoc(doc(db, 'groups', groupId, 'settlements', item.id));
               Alert.alert('Unsettled! ✅', 'Payment has been reverted.');
             } catch (err) {
-              Alert.alert('Error', 'Could not unsettle payment. Please try again.');
+              if (err?.code === 'permission-denied') {
+                Alert.alert('Not allowed', 'You can unsettle only payments you recorded/sent, or ask the group owner/admin.');
+              } else {
+                Alert.alert('Error', 'Could not unsettle payment. Please try again.');
+              }
               console.error(err);
             } finally {
               setUnsettlingId(null);
@@ -74,10 +78,14 @@ export default function TransactionHistoryScreen({ route }) {
   }
 
   const renderItem = ({ item }) => {
-    const involveMe = item.paidBy === user?.uid || item.paidTo === user?.uid;
-    const fromLabel = item.paidBy === user?.uid ? 'You' : (item.paidByName || item.paidBy);
+    const myUid = user?.uid || '';
+    const myEmail = (user?.email || '').toLowerCase();
+    const paidByValue = String(item.paidBy || '');
+    const paidByEmailLike = paidByValue.toLowerCase();
+    const isSender = paidByValue === myUid || (!!myEmail && paidByEmailLike === myEmail) || item.recordedBy === myUid;
+    const involveMe = isSender || item.paidTo === myUid;
+    const fromLabel = isSender ? 'You' : (item.paidByName || item.paidBy);
     const toLabel = item.paidTo === user?.uid ? 'you' : (item.paidToName || item.paidTo);
-    const isSender = item.paidBy === user?.uid;
     return (
       <View style={[styles.card, involveMe && styles.cardHighlight]}>
         <View style={styles.iconWrap}>
