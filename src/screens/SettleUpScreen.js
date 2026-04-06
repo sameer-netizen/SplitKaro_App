@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, ScrollView, TextInput,
 } from 'react-native';
-import { collection, addDoc, serverTimestamp, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -22,41 +22,6 @@ export default function SettleUpScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
   const [customAmount, setCustomAmount] = useState(safeTxnAmount.toFixed(2));
   const [note, setNote] = useState('');
-  const [duplicateFullSettlement, setDuplicateFullSettlement] = useState(null);
-  const [loadingCheck, setLoadingCheck] = useState(true);
-
-  // Check for existing settlement between same payer and payee
-  useEffect(() => {
-    if (!groupId || !txnFrom || !txnTo) {
-      setDuplicateFullSettlement(null);
-      setLoadingCheck(false);
-      return () => {};
-    }
-
-    const q = query(
-      collection(db, 'groups', groupId, 'settlements'),
-      where('paidBy', '==', txnFrom),
-      where('paidTo', '==', txnTo)
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      const latestFull = snap.docs
-        .map((d) => d.data())
-        .filter((s) => s.isPartial !== true)
-        .sort((a, b) => {
-          const aSec = a?.date?.seconds || 0;
-          const bSec = b?.date?.seconds || 0;
-          return bSec - aSec;
-        })[0] || null;
-
-      const isDuplicateFull = latestFull && Math.abs((Number(latestFull.amount) || 0) - safeTxnAmount) < 0.01;
-      setDuplicateFullSettlement(isDuplicateFull ? latestFull : null);
-      setLoadingCheck(false);
-    }, (err) => {
-      console.error('Error checking existing settlement:', err);
-      setLoadingCheck(false);
-    });
-    return () => unsub();
-  }, [groupId, txnFrom, txnTo, safeTxnAmount]);
 
   if (!groupId || !txnFrom || !txnTo || safeTxnAmount <= 0) {
     return (
@@ -99,15 +64,6 @@ export default function SettleUpScreen({ route, navigation }) {
       Alert.alert('Too much', `Amount cannot exceed ${formatINR(safeTxnAmount)}.`);
       return;
     }
-    if (duplicateFullSettlement) {
-      Alert.alert(
-        'Already Settled',
-        `This exact full settlement (${formatINR(duplicateFullSettlement.amount)}) is already recorded. Unsettle it first only if this was a mistake.`,
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
     setSaving(true);
     try {
       const dateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -172,16 +128,6 @@ export default function SettleUpScreen({ route, navigation }) {
           <Text style={styles.partialNote}>Partial payment — remaining {formatINR(Math.max(safeTxnAmount - parsedAmount, 0))} still owed</Text>
         )}
 
-        {/* Warning for existing settlement */}
-        {duplicateFullSettlement && (
-          <View style={styles.warningBox}>
-            <Ionicons name="alert-circle" size={18} color={COLORS.owe} />
-            <Text style={styles.warningText}>
-              Matching full settlement of {formatINR(duplicateFullSettlement.amount)} already exists. You can still settle if the amount is different.
-            </Text>
-          </View>
-        )}
-
         {/* Optional note */}
         <TextInput
           style={styles.noteInput}
@@ -192,8 +138,8 @@ export default function SettleUpScreen({ route, navigation }) {
         />
       </View>
 
-      <TouchableOpacity style={[styles.btn, (saving || duplicateFullSettlement) && styles.btnDisabled]} onPress={confirmSettle} disabled={saving || duplicateFullSettlement || loadingCheck}>
-        {saving || loadingCheck
+      <TouchableOpacity style={styles.btn} onPress={confirmSettle} disabled={saving}>
+        {saving
           ? <ActivityIndicator color="#fff" />
           : (
             <>
@@ -230,11 +176,8 @@ const styles = StyleSheet.create({
   rupeeSign: { fontSize: 24, fontWeight: '800', color: COLORS.primary, marginRight: 4 },
   amountInput: { flex: 1, fontSize: 28, fontWeight: '800', color: COLORS.primary, textAlign: 'center' },
   partialNote: { fontSize: 12, color: '#E65100', textAlign: 'center', marginBottom: 12, fontStyle: 'italic' },
-  warningBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFEBEE', borderRadius: 10, padding: 12, marginVertical: 12, gap: 8 },
-  warningText: { flex: 1, fontSize: 12, color: COLORS.owe, fontWeight: '500', lineHeight: 16 },
   noteInput: { borderWidth: 1.5, borderColor: '#E0E0E0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#555', width: '100%', backgroundColor: '#FAFAFA', marginTop: 8 },
   btn: { backgroundColor: COLORS.accent, borderRadius: 14, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, elevation: 3, marginBottom: 12 },
-  btnDisabled: { backgroundColor: '#BDBDBD', opacity: 0.6 },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cancelBtn: { paddingVertical: 14, alignItems: 'center' },
   cancelText: { color: '#888', fontSize: 15 },
