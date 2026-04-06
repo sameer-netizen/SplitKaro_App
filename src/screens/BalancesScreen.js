@@ -128,6 +128,11 @@ export default function BalancesScreen({ route, navigation }) {
 
             {transactions.length > 0 && (
               <>
+                <View style={styles.infoBox}>
+                  <Ionicons name="information-circle-outline" size={16} color="#666" />
+                  <Text style={styles.infoText}>Only pending payments shown. Settled payments appear in history.</Text>
+                </View>
+
                 <View style={styles.smartHeader}>
                   <View style={styles.smartRow}>
                     <Text style={[styles.sectionTitle, { marginTop: 16, marginBottom: 0 }]}>Smart Settlement</Text>
@@ -197,6 +202,8 @@ const styles = StyleSheet.create({
   bannerBig: { color: '#fff', fontSize: 24, fontWeight: '800', marginTop: 4 },
   historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7 },
   historyBtnText: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600' },
+  infoBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E8F5E9', borderRadius: 12, padding: 12, marginVertical: 12, gap: 8 },
+  infoText: { flex: 1, fontSize: 12, color: '#2E7D32', fontWeight: '500' },
   smartHeader: { marginTop: 16, marginBottom: 4 },
   smartRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   toggleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },

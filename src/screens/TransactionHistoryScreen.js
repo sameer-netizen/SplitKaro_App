@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator,
+  View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Alert,
 } from 'react-native';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,7 @@ export default function TransactionHistoryScreen({ route }) {
   const { user } = useAuth();
   const [settlements, setSettlements] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [unsettlingId, setUnsettlingId] = useState(null);
 
   useEffect(() => {
     const q = query(
@@ -28,6 +29,32 @@ export default function TransactionHistoryScreen({ route }) {
     return unsub;
   }, [groupId]);
 
+  const handleUnsettle = (item) => {
+    Alert.alert(
+      'Unsettle Payment?',
+      `Are you sure you want to revert ${formatINR(item.amount)} paid to ${item.paidToName || 'recipient'}?`,
+      [
+        { text: 'Cancel', onPress: () => {}, style: 'cancel' },
+        {
+          text: 'Unsettle',
+          onPress: async () => {
+            setUnsettlingId(item.id);
+            try {
+              await deleteDoc(doc(db, 'groups', groupId, 'settlements', item.id));
+              Alert.alert('Unsettled! ✅', 'Payment has been reverted.');
+            } catch (err) {
+              Alert.alert('Error', 'Could not unsettle payment. Please try again.');
+              console.error(err);
+            } finally {
+              setUnsettlingId(null);
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
+  };
+
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.accent} /></View>;
   }
@@ -36,6 +63,7 @@ export default function TransactionHistoryScreen({ route }) {
     const involveMe = item.paidBy === user.uid || item.paidTo === user.uid;
     const fromLabel = item.paidBy === user.uid ? 'You' : (item.paidByName || item.paidBy);
     const toLabel = item.paidTo === user.uid ? 'you' : (item.paidToName || item.paidTo);
+    const isSender = item.paidBy === user.uid;
     return (
       <View style={[styles.card, involveMe && styles.cardHighlight]}>
         <View style={styles.iconWrap}>
@@ -52,9 +80,24 @@ export default function TransactionHistoryScreen({ route }) {
             <Text style={styles.partialBadge}>Partial payment</Text>
           )}
         </View>
-        <Text style={[styles.amount, involveMe && { color: COLORS.primary }]}>
-          {formatINR(item.amount)}
-        </Text>
+        <View style={styles.cardEnd}>
+          <Text style={[styles.amount, involveMe && { color: COLORS.primary }]}>
+            {formatINR(item.amount)}
+          </Text>
+          {isSender && (
+            <TouchableOpacity
+              style={styles.unsettle}
+              onPress={() => handleUnsettle(item)}
+              disabled={unsettlingId === item.id}
+            >
+              {unsettlingId === item.id ? (
+                <ActivityIndicator size="small" color={COLORS.owe} />
+              ) : (
+                <Ionicons name="close-circle-outline" size={18} color={COLORS.owe} />
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
@@ -97,12 +140,14 @@ const styles = StyleSheet.create({
   summaryAmount: { color: '#fff', fontSize: 22, fontWeight: '800' },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', elevation: 1, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4 },
   cardHighlight: { borderWidth: 1.5, borderColor: COLORS.accent + '66' },
+  cardEnd: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   iconWrap: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.accent + '22', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   txnText: { fontSize: 14, color: '#444', marginBottom: 3 },
   bold: { fontWeight: '700', color: '#222' },
   meta: { fontSize: 12, color: '#999' },
   partialBadge: { fontSize: 11, color: COLORS.owe, fontStyle: 'italic', marginTop: 2 },
   amount: { fontSize: 16, fontWeight: '700', color: '#555' },
+  unsettle: { padding: 6, justifyContent: 'center', alignItems: 'center' },
   emptyInner: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 80 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#555', marginTop: 12 },
   emptySub: { fontSize: 13, color: '#999', marginTop: 6 },
