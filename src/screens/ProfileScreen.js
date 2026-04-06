@@ -1,15 +1,29 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 
 const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5', danger: '#C62828' };
+const APP_SHARE_URL = 'https://splitkaro.expo.app';
 
 export default function ProfileScreen() {
   const { user, userProfile, logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleShareApp = async () => {
+    const message = `Track shared expenses with me on SplitKaro!\n\nOpen or install here: ${APP_SHARE_URL}`;
+    try {
+      await Share.share({
+        title: 'SplitKaro',
+        message,
+        url: APP_SHARE_URL,
+      });
+    } catch {
+      Alert.alert('Error', 'Could not open share options. Please try again.');
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -97,6 +111,13 @@ export default function ProfileScreen() {
             <Text style={styles.infoValue}>Indian Rupee (₹)</Text>
           </View>
         </View>
+
+        <View style={styles.separator} />
+
+        <TouchableOpacity style={styles.shareBtn} onPress={handleShareApp}>
+          <Ionicons name="share-social-outline" size={18} color="#fff" />
+          <Text style={styles.shareText}>Share SplitKaro App</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Logout */}
@@ -128,6 +149,8 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: 11, color: '#aaa', fontWeight: '600', textTransform: 'uppercase' },
   infoValue: { fontSize: 15, color: '#333', fontWeight: '500', marginTop: 1 },
   separator: { height: 1, backgroundColor: '#F5F5F5', marginVertical: 8 },
+  shareBtn: { marginTop: 4, backgroundColor: COLORS.accent, borderRadius: 10, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  shareText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   logoutBtn: { backgroundColor: COLORS.danger, margin: 16, borderRadius: 14, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, elevation: 3 },
   logoutText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
