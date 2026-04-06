@@ -1,4 +1,4 @@
-name: Build & Publish APK
+name: Deploy Web & Trigger APK Build
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-release:
+  deploy-and-trigger-build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,13 +24,17 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Export website
+        run: |
+          npx expo export --platform web
+
       - name: Deploy website to Expo Hosting (production)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           npx eas-cli@latest deploy --prod --non-interactive
 
-      - name: Build APK via EAS
+      - name: Trigger APK build via EAS
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
@@ -38,48 +42,25 @@ jobs:
             --platform android \
             --profile preview \
             --non-interactive \
-            --json \
-            --wait > build-output.json
+            --json > build-output.json
 
-          APK_URL=$(jq -r '.[0].artifacts.applicationArchiveUrl // .[0].artifacts.buildUrl' build-output.json)
           BUILD_ID=$(jq -r '.[0].id' build-output.json)
+          BUILD_DETAILS_URL=$(jq -r '.[0].buildDetailsPageUrl // empty' build-output.json)
 
-          if [ -z "$APK_URL" ] || [ "$APK_URL" = "null" ]; then
-            echo "Could not resolve APK URL from EAS build output." >&2
+          if [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "null" ]; then
+            echo "Could not resolve build ID from EAS build output." >&2
             cat build-output.json >&2
             exit 1
           fi
 
-          echo "APK_URL=$APK_URL" >> "$GITHUB_ENV"
           echo "BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
+          echo "BUILD_DETAILS_URL=$BUILD_DETAILS_URL" >> "$GITHUB_ENV"
 
-      - name: Download APK
+      - name: Summarize triggered build
         run: |
-          mkdir -p release-assets
-          curl -L "$APK_URL" -o release-assets/SplitKaro-latest.apk
-          ls -lh release-assets
-
-      - name: Generate release tag
-        run: |
-          TAG="v$(date -u +'%Y%m%d-%H%M%S')"
-          echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: SplitKaro ${{ env.RELEASE_TAG }}
-          body: |
-            ## Download
-
-            Tap **SplitKaro-latest.apk** below to download and install on Android.
-
-            ### Android Install Steps
-            1. Download `SplitKaro-latest.apk` from Assets below.
-            2. Open the file on your Android phone.
-            3. If prompted, allow installation from unknown sources.
-            4. Tap **Install** → **Open**.
-
-            ---
-            - EAS Build ID: ${{ env.BUILD_ID }}
-          files: release-assets/SplitKaro-latest.apk
+          echo "Android build triggered successfully." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- EAS Build ID: $BUILD_ID" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$BUILD_DETAILS_URL" ]; then
+            echo "- Build details: $BUILD_DETAILS_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi

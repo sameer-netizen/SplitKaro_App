@@ -1,0 +1,85 @@
+name: Publish Finished APK
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+
+jobs:
+  publish-latest-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Resolve latest finished Android build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npx eas-cli@latest build:list \
+            --platform android \
+            --status finished \
+            --limit 1 \
+            --non-interactive \
+            --json > builds.json
+
+          BUILD_ID=$(jq -r '.[0].id // empty' builds.json)
+          APK_URL=$(jq -r '.[0].artifacts.applicationArchiveUrl // .[0].artifacts.buildUrl // empty' builds.json)
+
+          if [ -z "$BUILD_ID" ] || [ -z "$APK_URL" ]; then
+            echo "No finished Android build available yet."
+            exit 0
+          fi
+
+          echo "BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
+          echo "APK_URL=$APK_URL" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=apk-$BUILD_ID" >> "$GITHUB_ENV"
+
+      - name: Skip if release already exists
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_TAG" ]; then
+            exit 0
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release already exists for build $BUILD_ID."
+            exit 0
+          fi
+
+      - name: Download APK
+        if: env.RELEASE_TAG != ''
+        run: |
+          mkdir -p release-assets
+          curl -L "$APK_URL" -o release-assets/SplitKaro-latest.apk
+
+      - name: Create GitHub Release
+        if: env.RELEASE_TAG != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: SplitKaro APK ${{ env.BUILD_ID }}
+          body: |
+            ## Download
+
+            Tap **SplitKaro-latest.apk** below to download and install on Android.
+
+            ### Android Install Steps
+            1. Download `SplitKaro-latest.apk` from Assets below.
+            2. Open the file on your Android phone.
+            3. If prompted, allow installation from unknown sources.
+            4. Tap **Install** → **Open**.
+
+            ---
+            - EAS Build ID: ${{ env.BUILD_ID }}
+            - Source URL: ${{ env.APK_URL }}
+          files: release-assets/SplitKaro-latest.apk
