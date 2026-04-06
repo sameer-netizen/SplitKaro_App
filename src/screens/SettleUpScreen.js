@@ -22,13 +22,13 @@ export default function SettleUpScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
   const [customAmount, setCustomAmount] = useState(safeTxnAmount.toFixed(2));
   const [note, setNote] = useState('');
-  const [existingFullSettlement, setExistingFullSettlement] = useState(null);
+  const [duplicateFullSettlement, setDuplicateFullSettlement] = useState(null);
   const [loadingCheck, setLoadingCheck] = useState(true);
 
   // Check for existing settlement between same payer and payee
   useEffect(() => {
     if (!groupId || !txnFrom || !txnTo) {
-      setExistingFullSettlement(null);
+      setDuplicateFullSettlement(null);
       setLoadingCheck(false);
       return () => {};
     }
@@ -39,17 +39,24 @@ export default function SettleUpScreen({ route, navigation }) {
       where('paidTo', '==', txnTo)
     );
     const unsub = onSnapshot(q, (snap) => {
-      const fullSettlement = snap.docs
+      const latestFull = snap.docs
         .map((d) => d.data())
-        .find((s) => s.isPartial !== true);
-      setExistingFullSettlement(fullSettlement || null);
+        .filter((s) => s.isPartial !== true)
+        .sort((a, b) => {
+          const aSec = a?.date?.seconds || 0;
+          const bSec = b?.date?.seconds || 0;
+          return bSec - aSec;
+        })[0] || null;
+
+      const isDuplicateFull = latestFull && Math.abs((Number(latestFull.amount) || 0) - safeTxnAmount) < 0.01;
+      setDuplicateFullSettlement(isDuplicateFull ? latestFull : null);
       setLoadingCheck(false);
     }, (err) => {
       console.error('Error checking existing settlement:', err);
       setLoadingCheck(false);
     });
     return () => unsub();
-  }, [groupId, txnFrom, txnTo]);
+  }, [groupId, txnFrom, txnTo, safeTxnAmount]);
 
   if (!groupId || !txnFrom || !txnTo || safeTxnAmount <= 0) {
     return (
@@ -92,10 +99,10 @@ export default function SettleUpScreen({ route, navigation }) {
       Alert.alert('Too much', `Amount cannot exceed ${formatINR(safeTxnAmount)}.`);
       return;
     }
-    if (existingFullSettlement) {
+    if (duplicateFullSettlement) {
       Alert.alert(
-        'Pending Settlement Exists',
-        `You already have a full settlement of ${formatINR(existingFullSettlement.amount)} to this person. Unsettle it first if you want to settle again.`,
+        'Already Settled',
+        `This exact full settlement (${formatINR(duplicateFullSettlement.amount)}) is already recorded. Unsettle it first only if this was a mistake.`,
         [{ text: 'OK' }]
       );
       return;
@@ -166,11 +173,11 @@ export default function SettleUpScreen({ route, navigation }) {
         )}
 
         {/* Warning for existing settlement */}
-        {existingFullSettlement && (
+        {duplicateFullSettlement && (
           <View style={styles.warningBox}>
             <Ionicons name="alert-circle" size={18} color={COLORS.owe} />
             <Text style={styles.warningText}>
-              Existing full settlement of {formatINR(existingFullSettlement.amount)} found. Unsettle it first in the transaction history before settling again.
+              Matching full settlement of {formatINR(duplicateFullSettlement.amount)} already exists. You can still settle if the amount is different.
             </Text>
           </View>
         )}
@@ -185,7 +192,7 @@ export default function SettleUpScreen({ route, navigation }) {
         />
       </View>
 
-      <TouchableOpacity style={[styles.btn, (saving || existingFullSettlement) && styles.btnDisabled]} onPress={confirmSettle} disabled={saving || existingFullSettlement || loadingCheck}>
+      <TouchableOpacity style={[styles.btn, (saving || duplicateFullSettlement) && styles.btnDisabled]} onPress={confirmSettle} disabled={saving || duplicateFullSettlement || loadingCheck}>
         {saving || loadingCheck
           ? <ActivityIndicator color="#fff" />
           : (
