@@ -48,9 +48,13 @@
         "projectId": "70f1aa68-546e-4957-b2a8-989d2400c7aa"
       }
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
-      "url": "https://u.expo.dev/70f1aa68-546e-4957-b2a8-989d2400c7aa"
+      "url": "https://u.expo.dev/70f1aa68-546e-4957-b2a8-989d2400c7aa",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     }
   }
 }
