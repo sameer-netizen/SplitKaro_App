@@ -25,17 +25,23 @@ export default function CreateGroupScreen({ navigation }) {
 
   const makeGuestId = () => `guest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+  const emailAlreadyAdded = (email) => {
+    if (!email) return false;
+    return members.some((member) => member.email?.toLowerCase() === email.toLowerCase());
+  };
+
   const normalize = (v) => (v || '').trim().toLowerCase();
 
   const searchUsers = async (text) => {
-    if (!email) return false;
+    setSearchInput(text);
     const searchLower = normalize(text);
     if (searchLower.length < 2) {
+      setSearchResults([]);
+      return;
+    }
 
-  const searchUsers = async (text) => {
-    setSearchInput(text);
-    const trimmed = text.trim().toLowerCase();
-    if (trimmed.length < 2) {
+    setSearching(true);
+    try {
       const usersSnap = await getDocs(query(collection(db, 'users')));
       const matches = usersSnap.docs
         .map((d) => {
@@ -106,11 +112,6 @@ export default function CreateGroupScreen({ navigation }) {
         email: trimEmail,
         registered: false,
       },
-    ]);
-
-    setGuestName('');
-    setGuestEmail('');
-  };
     ]);
 
     setGuestName('');
