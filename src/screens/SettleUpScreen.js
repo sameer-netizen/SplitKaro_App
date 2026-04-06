@@ -12,8 +12,21 @@ import { formatINR } from '../utils/calculations';
 const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5', owe: '#C62828' };
 
 export default function SettleUpScreen({ route, navigation }) {
-  const { groupId, transaction, memberNames } = route.params;
+  const { groupId, transaction, memberNames = {} } = route.params || {};
   const { user } = useAuth();
+
+  if (!groupId || !transaction) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', padding: 24 }]}> 
+        <Text style={[styles.title, { textAlign: 'center' }]}>Settlement data missing</Text>
+        <Text style={[styles.sub, { marginBottom: 20 }]}>Please go back and try again.</Text>
+        <TouchableOpacity style={styles.btn} onPress={() => navigation.navigate('Balances', { groupId })}>
+          <Text style={styles.btnText}>Back to Balances</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const [saving, setSaving] = useState(false);
   const [customAmount, setCustomAmount] = useState(transaction.amount.toFixed(2));
   const [note, setNote] = useState('');
@@ -47,11 +60,7 @@ export default function SettleUpScreen({ route, navigation }) {
   const isPartial = !isNaN(parsedAmount) && parsedAmount < transaction.amount - 0.01;
 
   const goToPreviousScreen = () => {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-      return;
-    }
-    navigation.navigate('Balances', { groupId });
+    navigation.replace('Balances', { groupId });
   };
 
   const confirmSettle = async () => {
