@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, ScrollView, TextInput,
 } from 'react-native';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, onSnapshot } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../firebase';
 import { useAuth } from '../context/AuthContext';
 import { formatINR } from '../utils/calculations';
 
-const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5' };
+const COLORS = { primary: '#1B5E20', accent: '#4CAF50', bg: '#F5F5F5', owe: '#C62828' };
 
 export default function SettleUpScreen({ route, navigation }) {
   const { groupId, transaction, memberNames } = route.params;
@@ -17,6 +17,27 @@ export default function SettleUpScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
   const [customAmount, setCustomAmount] = useState(transaction.amount.toFixed(2));
   const [note, setNote] = useState('');
+  const [existingSettlement, setExistingSettlement] = useState(null);
+  const [loadingCheck, setLoadingCheck] = useState(true);
+
+  // Check for existing settlement between same payer and payee
+  useEffect(() => {
+    const q = query(
+      collection(db, 'groups', groupId, 'settlements'),
+      where('paidBy', '==', transaction.from),
+      where('paidTo', '==', transaction.to)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      if (snap.docs.length > 0) {
+        setExistingSettlement(snap.docs[0].data());
+      }
+      setLoadingCheck(false);
+    }, (err) => {
+      console.error('Error checking existing settlement:', err);
+      setLoadingCheck(false);
+    });
+    return () => unsub();
+  }, [groupId, transaction.from, transaction.to]);
 
   const fromName = transaction.from === user.uid ? 'You' : memberNames[transaction.from] || 'Someone';
   const toName = transaction.to === user.uid ? 'You' : memberNames[transaction.to] || 'Someone';
@@ -31,6 +52,14 @@ export default function SettleUpScreen({ route, navigation }) {
     }
     if (parsedAmount > transaction.amount + 0.01) {
       Alert.alert('Too much', `Amount cannot exceed ${formatINR(transaction.amount)}.`);
+      return;
+    }
+    if (existingSettlement) {
+      Alert.alert(
+        'Pending Settlement Exists',
+        `You already have a pending settlement of ${formatINR(existingSettlement.amount)} to this person. Unsettle it first if you want to settle again.`,
+        [{ text: 'OK' }]
+      );
       return;
     }
 
@@ -98,6 +127,16 @@ export default function SettleUpScreen({ route, navigation }) {
           <Text style={styles.partialNote}>Partial payment — remaining {formatINR(transaction.amount - parsedAmount)} still owed</Text>
         )}
 
+        {/* Warning for existing settlement */}
+        {existingSettlement && (
+          <View style={styles.warningBox}>
+            <Ionicons name="alert-circle" size={18} color={COLORS.owe} />
+            <Text style={styles.warningText}>
+              Existing settlement of {formatINR(existingSettlement.amount)} found. Unsettle it first in the transaction history before settling again.
+            </Text>
+          </View>
+        )}
+
         {/* Optional note */}
         <TextInput
           style={styles.noteInput}
@@ -108,8 +147,8 @@ export default function SettleUpScreen({ route, navigation }) {
         />
       </View>
 
-      <TouchableOpacity style={styles.btn} onPress={confirmSettle} disabled={saving}>
-        {saving
+      <TouchableOpacity style={[styles.btn, (saving || existingSettlement) && styles.btnDisabled]} onPress={confirmSettle} disabled={saving || existingSettlement || loadingCheck}>
+        {saving || loadingCheck
           ? <ActivityIndicator color="#fff" />
           : (
             <>
@@ -146,8 +185,11 @@ const styles = StyleSheet.create({
   rupeeSign: { fontSize: 24, fontWeight: '800', color: COLORS.primary, marginRight: 4 },
   amountInput: { flex: 1, fontSize: 28, fontWeight: '800', color: COLORS.primary, textAlign: 'center' },
   partialNote: { fontSize: 12, color: '#E65100', textAlign: 'center', marginBottom: 12, fontStyle: 'italic' },
+  warningBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFEBEE', borderRadius: 10, padding: 12, marginVertical: 12, gap: 8 },
+  warningText: { flex: 1, fontSize: 12, color: COLORS.owe, fontWeight: '500', lineHeight: 16 },
   noteInput: { borderWidth: 1.5, borderColor: '#E0E0E0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#555', width: '100%', backgroundColor: '#FAFAFA', marginTop: 8 },
   btn: { backgroundColor: COLORS.accent, borderRadius: 14, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, elevation: 3, marginBottom: 12 },
+  btnDisabled: { backgroundColor: '#BDBDBD', opacity: 0.6 },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   cancelBtn: { paddingVertical: 14, alignItems: 'center' },
   cancelText: { color: '#888', fontSize: 15 },
