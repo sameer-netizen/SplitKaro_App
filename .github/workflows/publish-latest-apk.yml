@@ -1,10 +1,13 @@
-name: Publish Latest APK
+name: Build & Publish APK
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
-  publish-latest-apk:
+  build-and-release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -18,22 +21,26 @@ jobs:
         with:
           node-version: 20
 
-      - name: Fetch latest finished Android build info
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build APK via EAS
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          npx eas-cli@latest build:list \
+          npx eas-cli@latest build \
             --platform android \
-            --status finished \
-            --limit 1 \
+            --profile preview \
             --non-interactive \
-            --json > builds.json
+            --json \
+            --wait > build-output.json
 
-          APK_URL=$(jq -r '.[0].artifacts.applicationArchiveUrl // .[0].artifacts.buildUrl' builds.json)
-          BUILD_ID=$(jq -r '.[0].id' builds.json)
+          APK_URL=$(jq -r '.[0].artifacts.applicationArchiveUrl // .[0].artifacts.buildUrl' build-output.json)
+          BUILD_ID=$(jq -r '.[0].id' build-output.json)
 
           if [ -z "$APK_URL" ] || [ "$APK_URL" = "null" ]; then
-            echo "Could not resolve APK URL from latest EAS build." >&2
+            echo "Could not resolve APK URL from EAS build output." >&2
+            cat build-output.json >&2
             exit 1
           fi
 
@@ -48,17 +55,25 @@ jobs:
 
       - name: Generate release tag
         run: |
-          TAG="apk-$(date -u +'%Y%m%d-%H%M%S')"
+          TAG="v$(date -u +'%Y%m%d-%H%M%S')"
           echo "RELEASE_TAG=$TAG" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: SplitKaro APK ${{ env.RELEASE_TAG }}
+          name: SplitKaro ${{ env.RELEASE_TAG }}
           body: |
-            Latest Android APK published from EAS build.
+            ## Download
 
+            Tap **SplitKaro-latest.apk** below to download and install on Android.
+
+            ### Android Install Steps
+            1. Download `SplitKaro-latest.apk` from Assets below.
+            2. Open the file on your Android phone.
+            3. If prompted, allow installation from unknown sources.
+            4. Tap **Install** → **Open**.
+
+            ---
             - EAS Build ID: ${{ env.BUILD_ID }}
-            - Source URL: ${{ env.APK_URL }}
           files: release-assets/SplitKaro-latest.apk
